@@ -52,23 +52,23 @@
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-    <Import Project="..\buildscripts\VisualStudio\MMDeviceAdapter.props" />
-    <Import Project="..\buildscripts\VisualStudio\MMCommon.props" />
+    <Import Project="..\..\buildscripts\VisualStudio\MMDeviceAdapter.props" />
+    <Import Project="..\..\buildscripts\VisualStudio\MMCommon.props" />
   </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-    <Import Project="..\buildscripts\VisualStudio\MMDeviceAdapter.props" />
-    <Import Project="..\buildscripts\VisualStudio\MMCommon.props" />
+    <Import Project="..\..\buildscripts\VisualStudio\MMDeviceAdapter.props" />
+    <Import Project="..\..\buildscripts\VisualStudio\MMCommon.props" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-    <Import Project="..\buildscripts\VisualStudio\MMDeviceAdapter.props" />
-    <Import Project="..\buildscripts\VisualStudio\MMCommon.props" />
+    <Import Project="..\..\buildscripts\VisualStudio\MMDeviceAdapter.props" />
+    <Import Project="..\..\buildscripts\VisualStudio\MMCommon.props" />
   </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-    <Import Project="..\buildscripts\VisualStudio\MMDeviceAdapter.props" />
-    <Import Project="..\buildscripts\VisualStudio\MMCommon.props" />
+    <Import Project="..\..\buildscripts\VisualStudio\MMDeviceAdapter.props" />
+    <Import Project="..\..\buildscripts\VisualStudio\MMCommon.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -152,10 +152,10 @@
     <ClCompile Include="TestCamera.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <Library Include="..\..\..\..\..\Program Files\Teledyne DALSA\Sapera\Lib\Win64\SapClassBasic.lib" />
+    <Library Include="$(SAPERADIR)\Lib\Win64\SapClassBasic.lib" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\MMDevice\MMDevice-SharedRuntime.vcxproj">
+    <ProjectReference Include="..\..\MMDevice\MMDevice-SharedRuntime.vcxproj">
       <Project>{b8c95f39-54bf-40a9-807b-598df2821d55}</Project>
     </ProjectReference>
   </ItemGroup>
