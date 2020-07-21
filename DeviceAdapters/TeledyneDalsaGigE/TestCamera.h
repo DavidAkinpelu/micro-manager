@@ -26,13 +26,12 @@
 #define _TestCamera_H_
 
 #include "DeviceBase.h"
-#include "ImgBuffer.h"
 #include "DeviceThreads.h"
 #include "ImgBuffer.h"
 #include "stdio.h"
 #include "conio.h"
 #include "math.h"
-#include "sapclassbasic.h"
+#include "SapClassBasic.h"
 #include <string>
 
 //////////////////////////////////////////////////////////////////////////////
