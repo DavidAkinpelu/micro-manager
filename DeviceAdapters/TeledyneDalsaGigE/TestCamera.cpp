@@ -10,6 +10,7 @@
 #include "conio.h"
 #include "math.h"
 #include <string>
+#include <functional>
 
 using namespace std;
 
@@ -92,7 +93,7 @@ TestCamera::TestCamera() :
    sequenceRunning_(false),
    SapFormatBytes_(1)
 {
-   // call the base class method to set-up default error codes/messages
+    // call the base class method to set-up default error codes/messages
    InitializeDefaultErrorMessages();
 
    // Description property
@@ -326,23 +327,43 @@ int TestCamera::Initialize()
    if(!AcqDevice_.SetFeatureValue("BinningHorizontal", 1))
 	   return DEVICE_ERR;
 
-  
+   // Create feature
+   SapFeature feature(loc_);
+   if (!feature.Create())
+	   return DEVICE_ERR;
+   double low = 0.0;
+   double high = 0.0;
+
+   // Device information
+   for (auto const& x : deviceInfoFeatures)
+   {
+	   char value[512];
+	   if (!AcqDevice_.GetFeatureValue(x.second.c_str(), value, 512))
+		   return DEVICE_ERR;
+
+	   string s = value;
+	   ret = CreateProperty(x.first.c_str(), s.c_str(), MM::String, true);
+   }
+
    // Setup gain
    pAct = new CPropertyAction(this, &TestCamera::OnGain);
    ret = CreateProperty(MM::g_Keyword_Gain, "1.0", MM::Float, false, pAct);
    assert(ret == DEVICE_OK);
    if(!AcqDevice_.SetFeatureValue("Gain", 1.0))
 	   return DEVICE_ERR;
-   SapFeature SapGain_(loc_);
-   if(!SapGain_.Create())
-	   return DEVICE_ERR;
-   AcqDevice_.GetFeatureInfo("Gain", &SapGain_);
-   double g_low = 0.0;
-   double g_high = 0.0;
-   SapGain_.GetMax(&g_high);
-   SapGain_.GetMin(&g_low);
-   SetPropertyLimits(MM::g_Keyword_Gain, g_low, g_high);
+   AcqDevice_.GetFeatureInfo("Gain", &feature);
+   feature.GetMax(&high);
+   feature.GetMin(&low);
+   SetPropertyLimits(MM::g_Keyword_Gain, low, high);
 
+   // Set up temperature
+   pAct = new CPropertyAction(this, &TestCamera::OnTemperature);
+   ret = CreateProperty("Temperature", "-1.0", MM::Float, true, pAct);
+   assert(ret == DEVICE_OK);
+   AcqDevice_.GetFeatureInfo("DeviceTemperature", &feature);
+   feature.GetMax(&high);
+   feature.GetMin(&low);
+   SetPropertyLimits("Temperature", low, high);
 
 
    // synchronize all properties
@@ -686,6 +707,22 @@ int TestCamera::OnBinning(MM::PropertyBase* pProp, MM::ActionType eAct)
    }
 
    return DEVICE_OK;
+}
+
+int TestCamera::OnTemperature(MM::PropertyBase* pProp, MM::ActionType eAct)
+{
+	if (eAct == MM::BeforeGet)
+	{
+		double temperature;
+		if (!AcqDevice_.GetFeatureValue("DeviceTemperature", &temperature))
+			return DEVICE_ERR;
+		pProp->Set(temperature);
+		return DEVICE_OK;
+	}
+	else if (eAct == MM::AfterSet)
+	{
+		return DEVICE_CAN_NOT_SET_PROPERTY;
+	}
 }
 
 /**

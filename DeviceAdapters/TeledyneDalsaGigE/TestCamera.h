@@ -41,6 +41,21 @@
 
 class SequenceThread;
 
+
+const std::map< std::string, std::string > deviceInfoFeatures = {
+    // information on device
+    {"VendorName", "DeviceVendorName"},
+    {"FamilyName", "DeviceFamilyName"},
+    {"ModelName", "DeviceModelName"},
+    {"Version", "DeviceVersion"},
+    {"ManufacturerInfo", "DeviceManufacturerInfo"},
+    {"FirmwareVersion", "DeviceFirmwareVersion"},
+    {"SerialNumber", "DeviceSerialNumber"},
+    {"DeviceID", "DeviceID"},
+    {"MacAddress", "deviceMacAddress"}
+};
+
+
 class TestCamera : public CCameraBase<TestCamera>  
 {
 public:
@@ -80,6 +95,7 @@ public:
    // action interface
    // ----------------
    int OnBinning(MM::PropertyBase* pProp, MM::ActionType eAct);
+   int OnTemperature(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnPixelType(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnGain(MM::PropertyBase* pProp, MM::ActionType eAct);
 
@@ -114,7 +130,6 @@ private:
    SapTransfer AcqDeviceToBuf_;
    SapTransfer* Xfer_;
    SapLocation loc_;
-   SapFeature SapGain_;
    int SapFormatBytes_;
 
    int FreeHandles();
