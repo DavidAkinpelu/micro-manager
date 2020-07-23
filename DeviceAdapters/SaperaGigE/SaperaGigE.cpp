@@ -358,12 +358,12 @@ int SaperaGigE::Initialize()
 
    // Set up temperature
    pAct = new CPropertyAction(this, &SaperaGigE::OnTemperature);
-   ret = CreateProperty("Temperature", "-1.0", MM::Float, true, pAct);
+   ret = CreateProperty("Device Temperature", "-1.0", MM::Float, true, pAct);
    assert(ret == DEVICE_OK);
    AcqDevice_.GetFeatureInfo("DeviceTemperature", &feature);
    feature.GetMax(&high);
    feature.GetMin(&low);
-   SetPropertyLimits("Temperature", low, high);
+   SetPropertyLimits("Device Temperature", low, high);
 
 
    // synchronize all properties

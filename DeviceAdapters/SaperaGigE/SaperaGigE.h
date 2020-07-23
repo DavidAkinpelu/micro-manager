@@ -43,16 +43,17 @@ class SequenceThread;
 
 
 const std::map< std::string, std::string > deviceInfoFeatures = {
-    // information on device
-    {"VendorName", "DeviceVendorName"},
-    {"FamilyName", "DeviceFamilyName"},
-    {"ModelName", "DeviceModelName"},
-    {"Version", "DeviceVersion"},
-    {"ManufacturerInfo", "DeviceManufacturerInfo"},
-    {"FirmwareVersion", "DeviceFirmwareVersion"},
-    {"SerialNumber", "DeviceSerialNumber"},
-    {"DeviceID", "DeviceID"},
-    {"MacAddress", "deviceMacAddress"}
+    // information on device - use names shown in Sapera CamExpert
+    {"Manufacturer Name", "DeviceVendorName"},
+    {"Family Name", "DeviceFamilyName"},
+    {"Model Name", "DeviceModelName"},
+    {"Device Version", "DeviceVersion"},
+    {"Manufacturer Info", "DeviceManufacturerInfo"},
+    {"Manufacturer Part Number", "deviceManufacturerPartNumber"},
+    {"Firmware Version", "DeviceFirmwareVersion"},
+    {"Serial Number", "DeviceSerialNumber"},
+    {"Device User ID", "DeviceUserID"},
+    {"MAC Address", "deviceMacAddress"}
 };
 
 
