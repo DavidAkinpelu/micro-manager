@@ -1,5 +1,5 @@
 /////////////////////////////////////////////////////////
-// FILE:		TestCamera.cpp
+// FILE:		SaperaGigE.cpp
 // PROJECT:		Teledyne DALSA Micro-Manager Glue Library
 //-------------------------------------------------------
 // AUTHOR: Robert Frazee, rfraze1@lsu.edu
@@ -14,13 +14,13 @@
 
 using namespace std;
 
-const char* g_CameraName = "GigE Nano";
+const char* g_CameraName = "SaperaGigE";
 const char* g_PixelType_8bit = "8bit";
 const char* g_PixelType_10bit = "10bit";
 const char* g_PixelType_12bit = "12bit";
 
 const char* g_CameraModelProperty = "Model";
-const char* g_CameraModel_A = "Nano-M1930-NIR";
+const char* g_CameraModel_A = "Teledyne-DALSA-Genie";
 
 // g_CameraAcqDeviceNumberProperty
 // g_CameraServerNameProperty
@@ -42,7 +42,7 @@ const char* g_CameraConfigFilename_Def = "NoFile";
  */
 MODULE_API void InitializeModuleData()
 {
-   RegisterDevice(g_CameraName, MM::CameraDevice, "GigE Nano Camera Device");
+   RegisterDevice(g_CameraName, MM::CameraDevice, "Sapera GigE Camera Device");
 }
 
 MODULE_API MM::Device* CreateDevice(const char* deviceName)
@@ -54,12 +54,12 @@ MODULE_API MM::Device* CreateDevice(const char* deviceName)
    if (strcmp(deviceName, g_CameraName) == 0)
    {
       // create camera
-      return new TestCamera();
+      return new SaperaGigE();
    }
 
    // ...supplied name not recognized
    // to heck with it, return a device anyway
-   return new TestCamera();
+   return new SaperaGigE();
 }
 
 MODULE_API void DeleteDevice(MM::Device* pDevice)
@@ -68,11 +68,11 @@ MODULE_API void DeleteDevice(MM::Device* pDevice)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// TestCamera implementation
+// SaperaGigE implementation
 // ~~~~~~~~~~~~~~~~~~~~~~~
 
 /**
-* TestCamera constructor.
+* SaperaGigE constructor.
 * Setup default all variables and create device properties required to exist
 * before intialization. In this case, no such properties were required. All
 * properties will be created in the Initialize() method.
@@ -81,7 +81,7 @@ MODULE_API void DeleteDevice(MM::Device* pDevice)
 * the constructor. We should do as little as possible in the constructor and
 * perform most of the initialization in the Initialize() method.
 */
-TestCamera::TestCamera() :
+SaperaGigE::SaperaGigE() :
    binning_ (1),
    gain_(1),
    bytesPerPixel_(1),
@@ -97,7 +97,7 @@ TestCamera::TestCamera() :
    InitializeDefaultErrorMessages();
 
    // Description property
-   int ret = CreateProperty(MM::g_Keyword_Description, "GigE Nano Camera Adapter", MM::String, true);
+   int ret = CreateProperty(MM::g_Keyword_Description, "Sapera GigE Camera Adapter", MM::String, true);
    assert(ret == DEVICE_OK);
 
    // camera type pre-initialization property
@@ -136,13 +136,13 @@ TestCamera::TestCamera() :
 }
 
 /**
-* TestCamera destructor.
+* SaperaGigE destructor.
 * If this device used as intended within the Micro-Manager system,
 * Shutdown() will be always called before the destructor. But in any case
 * we need to make sure that all resources are properly released even if
 * Shutdown() was not called.
 */
-TestCamera::~TestCamera()
+SaperaGigE::~SaperaGigE()
 {
    if (initialized_)
       Shutdown();
@@ -152,7 +152,7 @@ TestCamera::~TestCamera()
 * Obtains device name.
 * Required by the MM::Device API.
 */
-void TestCamera::GetName(char* name) const
+void SaperaGigE::GetName(char* name) const
 {
    // We just return the name we use for referring to this
    // device adapter.
@@ -165,7 +165,7 @@ void TestCamera::GetName(char* name) const
 * Device properties are typically created here as well.
 * Required by the MM::Device API.
 */
-int TestCamera::Initialize()
+int SaperaGigE::Initialize()
 {
    if (initialized_)
       return DEVICE_OK;
@@ -175,7 +175,7 @@ int TestCamera::Initialize()
    // -----------------
 
    // binning
-   CPropertyAction *pAct = new CPropertyAction (this, &TestCamera::OnBinning);
+   CPropertyAction *pAct = new CPropertyAction (this, &SaperaGigE::OnBinning);
    //@TODO: Check what the actual binning value is and set that
    // For now, set binning to 1 for MM and set that on the camera later
    int ret = CreateProperty(MM::g_Keyword_Binning, "1", MM::Integer, false, pAct);
@@ -264,7 +264,7 @@ int TestCamera::Initialize()
 	//SapManager::DisplayMessage("(Sapera app)Starting Xfer");
 	//Start continuous grab
 	//Xfer_->Grab();
-	//SapManager::DisplayMessage("(Sapera app)Sapera Initialization for TestCamera complete");
+	//SapManager::DisplayMessage("(Sapera app)Sapera Initialization for SaperaGigE complete");
 
 	if(!AcqDevice_.GetFeatureValue("ExposureTime", &exposureMs_))
 		return DEVICE_ERR;
@@ -287,7 +287,7 @@ int TestCamera::Initialize()
 			return ret;
 		}
 		ResizeImageBuffer();
-		pAct = new CPropertyAction (this, &TestCamera::OnPixelType);
+		pAct = new CPropertyAction (this, &SaperaGigE::OnPixelType);
 		ret = CreateProperty(MM::g_Keyword_PixelType, g_PixelType_8bit, MM::String, false, pAct);
 		assert(ret == DEVICE_OK);
 	}
@@ -304,7 +304,7 @@ int TestCamera::Initialize()
 			return ret;
 		}
 		ResizeImageBuffer();
-		pAct = new CPropertyAction (this, &TestCamera::OnPixelType);
+		pAct = new CPropertyAction (this, &SaperaGigE::OnPixelType);
 		ret = CreateProperty(MM::g_Keyword_PixelType, g_PixelType_10bit, MM::String, false, pAct);
 		assert(ret == DEVICE_OK);
 	}
@@ -346,7 +346,7 @@ int TestCamera::Initialize()
    }
 
    // Setup gain
-   pAct = new CPropertyAction(this, &TestCamera::OnGain);
+   pAct = new CPropertyAction(this, &SaperaGigE::OnGain);
    ret = CreateProperty(MM::g_Keyword_Gain, "1.0", MM::Float, false, pAct);
    assert(ret == DEVICE_OK);
    if(!AcqDevice_.SetFeatureValue("Gain", 1.0))
@@ -357,7 +357,7 @@ int TestCamera::Initialize()
    SetPropertyLimits(MM::g_Keyword_Gain, low, high);
 
    // Set up temperature
-   pAct = new CPropertyAction(this, &TestCamera::OnTemperature);
+   pAct = new CPropertyAction(this, &SaperaGigE::OnTemperature);
    ret = CreateProperty("Temperature", "-1.0", MM::Float, true, pAct);
    assert(ret == DEVICE_OK);
    AcqDevice_.GetFeatureInfo("DeviceTemperature", &feature);
@@ -388,7 +388,7 @@ int TestCamera::Initialize()
 * Shutdown() may be called multiple times in a row.
 * Required by the MM::Device API.
 */
-int TestCamera::Shutdown()
+int SaperaGigE::Shutdown()
 {
 	if(!initialized_)
 		return DEVICE_OK;
@@ -406,7 +406,7 @@ int TestCamera::Shutdown()
 /**
 * Frees Sapera buffers and such
 */
-int TestCamera::FreeHandles()
+int SaperaGigE::FreeHandles()
 {
 	if(Xfer_ && *Xfer_ && !Xfer_->Destroy()) return DEVICE_ERR;
 	if(!Buffers_.Destroy()) return DEVICE_ERR;
@@ -415,7 +415,7 @@ int TestCamera::FreeHandles()
 	return DEVICE_OK;
 }
 
-int TestCamera::ErrorBox(LPCWSTR text, LPCWSTR caption)
+int SaperaGigE::ErrorBox(LPCWSTR text, LPCWSTR caption)
 {
 	return MessageBox(NULL, caption, text, (MB_ICONERROR | MB_OK));
 }
@@ -425,7 +425,7 @@ int TestCamera::ErrorBox(LPCWSTR text, LPCWSTR caption)
 * This function blocks during the actual exposure and returns immediately afterwards 
 * Required by the MM::Camera API.
 */
-int TestCamera::SnapImage()
+int SaperaGigE::SnapImage()
 {
 	// This will always be false, as no sequences will ever run
 	if(sequenceRunning_)
@@ -453,7 +453,7 @@ int TestCamera::SnapImage()
 * the pixel buffer on its own. In other words, the buffer can change only if
 * appropriate properties are set (such as binning, pixel type, etc.)
 */
-const unsigned char* TestCamera::GetImageBuffer()
+const unsigned char* SaperaGigE::GetImageBuffer()
 {
 	// Put Sapera buffer into Micro-Manager Buffer
 	Buffers_.ReadRect(roiX_, roiY_, img_.Width(), img_.Height(), const_cast<unsigned char*>(img_.GetPixels()));
@@ -465,7 +465,7 @@ const unsigned char* TestCamera::GetImageBuffer()
 * Returns image buffer X-size in pixels.
 * Required by the MM::Camera API.
 */
-unsigned TestCamera::GetImageWidth() const
+unsigned SaperaGigE::GetImageWidth() const
 {
    return img_.Width();
 }
@@ -474,7 +474,7 @@ unsigned TestCamera::GetImageWidth() const
 * Returns image buffer Y-size in pixels.
 * Required by the MM::Camera API.
 */
-unsigned TestCamera::GetImageHeight() const
+unsigned SaperaGigE::GetImageHeight() const
 {
    return img_.Height();
 }
@@ -483,7 +483,7 @@ unsigned TestCamera::GetImageHeight() const
 * Returns image buffer pixel depth in bytes.
 * Required by the MM::Camera API.
 */
-unsigned TestCamera::GetImageBytesPerPixel() const
+unsigned SaperaGigE::GetImageBytesPerPixel() const
 {
    return img_.Depth();
 } 
@@ -494,7 +494,7 @@ unsigned TestCamera::GetImageBytesPerPixel() const
 * a guideline on how to interpret pixel values.
 * Required by the MM::Camera API.
 */
-unsigned TestCamera::GetBitDepth() const
+unsigned SaperaGigE::GetBitDepth() const
 {
    return bitsPerPixel_;
 }
@@ -503,7 +503,7 @@ unsigned TestCamera::GetBitDepth() const
 * Returns the size in bytes of the image buffer.
 * Required by the MM::Camera API.
 */
-long TestCamera::GetImageBufferSize() const
+long SaperaGigE::GetImageBufferSize() const
 {
    return img_.Width() * img_.Height() * GetImageBytesPerPixel();
 }
@@ -522,7 +522,7 @@ long TestCamera::GetImageBufferSize() const
 * @param xSize - width
 * @param ySize - height
 */
-int TestCamera::SetROI(unsigned x, unsigned y, unsigned xSize, unsigned ySize)
+int SaperaGigE::SetROI(unsigned x, unsigned y, unsigned xSize, unsigned ySize)
 {
    if (xSize == 0 && ySize == 0)
    {
@@ -545,7 +545,7 @@ int TestCamera::SetROI(unsigned x, unsigned y, unsigned xSize, unsigned ySize)
 * Returns the actual dimensions of the current ROI.
 * Required by the MM::Camera API.
 */
-int TestCamera::GetROI(unsigned& x, unsigned& y, unsigned& xSize, unsigned& ySize)
+int SaperaGigE::GetROI(unsigned& x, unsigned& y, unsigned& xSize, unsigned& ySize)
 {
    x = roiX_;
    y = roiY_;
@@ -560,7 +560,7 @@ int TestCamera::GetROI(unsigned& x, unsigned& y, unsigned& xSize, unsigned& ySiz
 * Resets the Region of Interest to full frame.
 * Required by the MM::Camera API.
 */
-int TestCamera::ClearROI()
+int SaperaGigE::ClearROI()
 {
    ResizeImageBuffer();
    roiX_ = 0;
@@ -573,7 +573,7 @@ int TestCamera::ClearROI()
 * Returns the current exposure setting in milliseconds.
 * Required by the MM::Camera API.
 */
-double TestCamera::GetExposure() const
+double SaperaGigE::GetExposure() const
 {
    return exposureMs_;
 }
@@ -582,7 +582,7 @@ double TestCamera::GetExposure() const
 * Sets exposure in milliseconds.
 * Required by the MM::Camera API.
 */
-void TestCamera::SetExposure(double exp)
+void SaperaGigE::SetExposure(double exp)
 {
    exposureMs_ = exp;
    // Micromanager deals with exposure time in ms
@@ -595,7 +595,7 @@ void TestCamera::SetExposure(double exp)
 * Returns the current binning factor.
 * Required by the MM::Camera API.
 */
-int TestCamera::GetBinning() const
+int SaperaGigE::GetBinning() const
 {
    return binning_;
 }
@@ -604,12 +604,12 @@ int TestCamera::GetBinning() const
 * Sets binning factor.
 * Required by the MM::Camera API.
 */
-int TestCamera::SetBinning(int binF)
+int SaperaGigE::SetBinning(int binF)
 {
    return SetProperty(MM::g_Keyword_Binning, CDeviceUtils::ConvertToString(binF));
 }
 
-int TestCamera::PrepareSequenceAcqusition()
+int SaperaGigE::PrepareSequenceAcqusition()
 {
 	return DEVICE_ERR;
 }
@@ -620,7 +620,7 @@ int TestCamera::PrepareSequenceAcqusition()
  * Please implement this yourself and do not rely on the base class implementation
  * The Base class implementation is deprecated and will be removed shortly
  */
-int TestCamera::StartSequenceAcquisition(double interval_ms)
+int SaperaGigE::StartSequenceAcquisition(double interval_ms)
 {
 	//@TODO: Implement Sequence Acquisition
 	return DEVICE_ERR;
@@ -631,7 +631,7 @@ int TestCamera::StartSequenceAcquisition(double interval_ms)
 /**                                                                       
 * Stop and wait for the Sequence thread finished                                   
 */                                                                        
-int TestCamera::StopSequenceAcquisition()                                     
+int SaperaGigE::StopSequenceAcquisition()                                     
 {
 	//@TODO: Implement Sequence Acquisition
 	return DEVICE_ERR;
@@ -646,7 +646,7 @@ int TestCamera::StopSequenceAcquisition()
 * A sequence acquisition should run on its own thread and transport new images
 * coming of the camera into the MMCore circular buffer.
 */
-int TestCamera::StartSequenceAcquisition(long numImages, double interval_ms, bool stopOnOverflow)
+int SaperaGigE::StartSequenceAcquisition(long numImages, double interval_ms, bool stopOnOverflow)
 {
 	//@TODO: Implement Sequence Acquisition
 	return DEVICE_ERR;
@@ -668,27 +668,27 @@ int TestCamera::StartSequenceAcquisition(long numImages, double interval_ms, boo
 /*
  * Inserts Image and MetaData into MMCore circular Buffer
  */
-int TestCamera::InsertImage()
+int SaperaGigE::InsertImage()
 {
 	//@TODO: Implement Sequence Acquisition
 	return GetCoreCallback()->InsertImage(this, const_cast<unsigned char*>(img_.GetPixels()), GetImageWidth(), GetImageHeight(), GetImageBytesPerPixel());
 }
 
 
-bool TestCamera::IsCapturing() {
+bool SaperaGigE::IsCapturing() {
 	//@TODO: Implement Sequence Acquisition
    return sequenceRunning_;
 }
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// TestCamera Action handlers
+// SaperaGigE Action handlers
 ///////////////////////////////////////////////////////////////////////////////
 
 /**
 * Handles "Binning" property.
 */
-int TestCamera::OnBinning(MM::PropertyBase* pProp, MM::ActionType eAct)
+int SaperaGigE::OnBinning(MM::PropertyBase* pProp, MM::ActionType eAct)
 {
    if (eAct == MM::AfterSet)
    {
@@ -709,7 +709,7 @@ int TestCamera::OnBinning(MM::PropertyBase* pProp, MM::ActionType eAct)
    return DEVICE_OK;
 }
 
-int TestCamera::OnTemperature(MM::PropertyBase* pProp, MM::ActionType eAct)
+int SaperaGigE::OnTemperature(MM::PropertyBase* pProp, MM::ActionType eAct)
 {
 	if (eAct == MM::BeforeGet)
 	{
@@ -728,7 +728,7 @@ int TestCamera::OnTemperature(MM::PropertyBase* pProp, MM::ActionType eAct)
 /**
 * Handles "PixelType" property.
 */
-int TestCamera::OnPixelType(MM::PropertyBase* pProp, MM::ActionType eAct)
+int SaperaGigE::OnPixelType(MM::PropertyBase* pProp, MM::ActionType eAct)
 {
 	//bytesPerPixel_ = 1;
 	//ResizeImageBuffer();
@@ -789,7 +789,7 @@ int TestCamera::OnPixelType(MM::PropertyBase* pProp, MM::ActionType eAct)
 /**
 * Handles "Gain" property.
 */
-int TestCamera::OnGain(MM::PropertyBase* pProp, MM::ActionType eAct)
+int SaperaGigE::OnGain(MM::PropertyBase* pProp, MM::ActionType eAct)
 {
    if (eAct == MM::AfterSet)
    {
@@ -807,13 +807,13 @@ int TestCamera::OnGain(MM::PropertyBase* pProp, MM::ActionType eAct)
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// Private TestCamera methods
+// Private SaperaGigE methods
 ///////////////////////////////////////////////////////////////////////////////
 
 /**
 * Sync internal image buffer size to the chosen property values.
 */
-int TestCamera::ResizeImageBuffer()
+int SaperaGigE::ResizeImageBuffer()
 {
    img_.Resize(IMAGE_WIDTH/binning_, IMAGE_HEIGHT/binning_, bytesPerPixel_);
 
@@ -823,7 +823,7 @@ int TestCamera::ResizeImageBuffer()
 /**
  * Generate an image with fixed value for all pixels
  */
-void TestCamera::GenerateImage()
+void SaperaGigE::GenerateImage()
 {
    const int maxValue = (1 << MAX_BIT_DEPTH) - 1; // max for the 12 bit camera
    const double maxExp = 1000;
@@ -835,7 +835,7 @@ void TestCamera::GenerateImage()
 /*
  * Reformat Sapera Buffer Object
  */
-int TestCamera::SapBufferReformat(SapFormat format, const char * acqFormat)
+int SaperaGigE::SapBufferReformat(SapFormat format, const char * acqFormat)
 {
 	Xfer_->Destroy();
 	AcqDevice_.SetFeatureValue("PixelFormat", acqFormat);

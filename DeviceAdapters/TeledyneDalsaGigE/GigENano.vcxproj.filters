@@ -11,6 +11,10 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <Library Include="$(SAPERADIR)\Lib\Win64\SapClassBasic.lib" />
+    <Library Include="..\..\build\Debug\x64\MMDevice-SharedRuntime.lib" />
+  </ItemGroup>
+  <ItemGroup>
     <ClInclude Include="TestCamera.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -19,9 +23,5 @@
     <ClCompile Include="TestCamera.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <Library Include="$(SAPERADIR)\Lib\Win64\SapClassBasic.lib" />
-    <Library Include="..\..\build\Debug\x64\MMDevice-SharedRuntime.lib" />
   </ItemGroup>
 </Project>

@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-// FILE:          TestCamera.h
+// FILE:          SaperaGigE.h
 // PROJECT:       Micro-Manager
 // SUBSYSTEM:     DeviceAdapters
 //-----------------------------------------------------------------------------
@@ -22,8 +22,8 @@
 //                INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES.
 //
 
-#ifndef _TestCamera_H_
-#define _TestCamera_H_
+#ifndef _SaperaGigE_H_
+#define _SaperaGigE_H_
 
 #include "DeviceBase.h"
 #include "DeviceThreads.h"
@@ -56,11 +56,11 @@ const std::map< std::string, std::string > deviceInfoFeatures = {
 };
 
 
-class TestCamera : public CCameraBase<TestCamera>  
+class SaperaGigE : public CCameraBase<SaperaGigE>  
 {
 public:
-   TestCamera();
-   ~TestCamera();
+   SaperaGigE();
+   ~SaperaGigE();
   
    // MMDevice API
    // ------------
@@ -69,7 +69,7 @@ public:
   
    void GetName(char* name) const;      
    
-   // TestCamera API
+   // SaperaGigE API
    // ------------
    int SnapImage();
    const unsigned char* GetImageBuffer();
@@ -134,7 +134,7 @@ private:
 
    int FreeHandles();
    int ErrorBox(LPCWSTR text, LPCWSTR caption);
-   LPCWSTR TestCamera::string2winstring(const std::string& s);
+   LPCWSTR SaperaGigE::string2winstring(const std::string& s);
    int SapBufferReformat(SapFormat format, const char * acqFormat);
 };
 
@@ -143,7 +143,7 @@ private:
 class SequenceThread : public MMDeviceThreadBase
 {
     public:
-        SequenceThread(TestCamera* pCam) : stop_(false), numImages_(0) {camera_ = pCam;}
+        SequenceThread(SaperaGigE* pCam) : stop_(false), numImages_(0) {camera_ = pCam;}
         ~SequenceThread() {}
 
         int svc (void);
@@ -160,9 +160,9 @@ class SequenceThread : public MMDeviceThreadBase
 		long GetLength(void) {return numImages_;};
 
     private:
-        TestCamera* camera_;
+        SaperaGigE* camera_;
         bool stop_;
         long numImages_;
 };
 
-#endif //_TestCamera_H_
+#endif //_SaperaGigE_H_
