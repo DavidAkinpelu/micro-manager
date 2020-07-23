@@ -29,6 +29,7 @@
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
@@ -147,10 +148,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="TestCamera.h" />
+    <ClInclude Include="SaperaGigE.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="TestCamera.cpp" />
+    <ClCompile Include="SaperaGigE.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="$(SAPERADIR)\Lib\Win64\SapClassBasic.lib" />

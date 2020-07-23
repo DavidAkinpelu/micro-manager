@@ -4,7 +4,7 @@
 //-------------------------------------------------------
 // AUTHOR: Robert Frazee, rfraze1@lsu.edu
 
-#include "TestCamera.h"
+#include "SaperaGigE.h"
 #include "../MMDevice/ModuleInterface.h"
 #include "stdio.h"
 #include "conio.h"

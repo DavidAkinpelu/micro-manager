@@ -15,12 +15,12 @@
     <Library Include="..\..\build\Debug\x64\MMDevice-SharedRuntime.lib" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="TestCamera.h">
+    <ClInclude Include="SaperaGigE.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="TestCamera.cpp">
+    <ClCompile Include="SaperaGigE.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
