@@ -19,9 +19,6 @@ const char* g_PixelType_8bit = "8bit";
 const char* g_PixelType_10bit = "10bit";
 const char* g_PixelType_12bit = "12bit";
 
-const char* g_CameraModelProperty = "Model";
-const char* g_CameraModel_A = "Teledyne-DALSA-Genie";
-
 // g_CameraAcqDeviceNumberProperty
 // g_CameraServerNameProperty
 // g_CameraConfigFilenameProperty
@@ -101,15 +98,6 @@ SaperaGigE::SaperaGigE() :
    assert(ret == DEVICE_OK);
 
    // camera type pre-initialization property
-   ret = CreateProperty(g_CameraModelProperty, g_CameraModel_A, MM::String, false, 0, true);
-   assert(ret == DEVICE_OK);
-
-   vector<string> modelValues;
-   modelValues.push_back(g_CameraModel_A);
-   modelValues.push_back(g_CameraModel_A); 
-
-   ret = SetAllowedValues(g_CameraModelProperty, modelValues);
-   assert(ret == DEVICE_OK);
 
    // Sapera++ library stuff
 
