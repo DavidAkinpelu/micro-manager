@@ -19,11 +19,6 @@ const char* g_PixelType_8bit = "8bit";
 const char* g_PixelType_10bit = "10bit";
 const char* g_PixelType_12bit = "12bit";
 
-// g_CameraAcqDeviceNumberProperty
-// g_CameraServerNameProperty
-//const char* g_CameraAcqDeviceNumberProperty = "Acquisition Device Number";
-
-
 ///////////////////////////////////////////////////////////////////////////////
 // Exported MMDevice API
 ///////////////////////////////////////////////////////////////////////////////
@@ -168,25 +163,10 @@ int SaperaGigE::Initialize()
    // create live video thread
    thd_ = new SequenceThread(this);
 
-
-   //Sapera stuff
-
-   pAct = new CPropertyAction(this, &SaperaGigE::OnConfigFile);
-   ret = CreateProperty(g_CameraConfigFilenameProperty, "no file", MM::String, false, pAct);
-   assert(ret == DEVICE_OK);
-
-   //SapManager::DisplayMessage("(Sapera app)Creating loc_ object");
    SapLocation loc_(acqDeviceList_[0].c_str());
-   //SapManager::DisplayMessage("(Sapera app)Created loc_ object");
-   //SapManager::DisplayMessage("(Sapera app)GetResourceCount for ResourceAcqDevice starting"); 
    //if(SapManager::GetResourceCount(acqServerName_, SapManager::ResourceAcqDevice) > 0)
    //{
-	   //SapManager::DisplayMessage("(Sapera app)GetResourceCount for ResourceAcqDevice found something");
-	   //if(strcmp(configFilename_, "NoFile") == 0)
 	   AcqDevice_ = SapAcqDevice(loc_, false);
-	   //else
-	   //   AcqDevice_ = SapAcqDevice(loc_, configFilename_);
-
 	   Buffers_ = SapBufferWithTrash(2, &AcqDevice_);
 	   AcqDeviceToBuf_ = SapAcqDeviceToBuf(&AcqDevice_, &Buffers_);
 	   Xfer_ = &AcqDeviceToBuf_;
@@ -253,7 +233,7 @@ int SaperaGigE::Initialize()
 	// synchronize bit depth with camera
 
 	char acqFormat[10];
-	AcqDevice_.GetFeatureValue("PixelFormat", acqFormat, 10);
+	AcqDevice_.GetFeatureValue("PixelFormat", acqFormat, sizeof(acqFormat));
 	if(strcmp(acqFormat, "Mono8") == 0)
 	{
 		// Setup Micro-Manager for 8bit pixels
@@ -289,15 +269,11 @@ int SaperaGigE::Initialize()
 		assert(ret == DEVICE_OK);
 	}
 
-
 	// pixel type
-   
-
-   vector<string> pixelTypeValues;
+    vector<string> pixelTypeValues;
    pixelTypeValues.push_back(g_PixelType_8bit);
    pixelTypeValues.push_back(g_PixelType_10bit);
-
-   
+      
    ret = SetAllowedValues(MM::g_Keyword_PixelType, pixelTypeValues);
    assert(ret == DEVICE_OK);
 
@@ -308,14 +284,30 @@ int SaperaGigE::Initialize()
 	   return DEVICE_ERR;
 
    // Device information
-   for (auto const& x : deviceInfoFeatures)
+   for (auto const& x : deviceInfoFeaturesStr)
    {
+	   BOOL isAvailable;
+	   AcqDevice_.IsFeatureAvailable(x.second.c_str(), &isAvailable);
+	   if (!isAvailable)
+		   continue;
 	   char value[512];
 	   if (!AcqDevice_.GetFeatureValue(x.second.c_str(), value, sizeof(value)))
 		   return DEVICE_ERR;
 
 	   string s = value;
 	   ret = CreateProperty(x.first.c_str(), s.c_str(), MM::String, true);
+	   assert(ret == DEVICE_OK);
+   }
+
+   // Device information
+   for (auto const& x : deviceInfoFeaturesInt)
+   {
+	   UINT32 value;
+	   if (!AcqDevice_.GetFeatureValue(x.second.c_str(), &value))
+		   return DEVICE_ERR;
+
+	   ret = CreateProperty(x.first.c_str(), std::to_string(value).c_str(), MM::Integer, true);
+	   assert(ret == DEVICE_OK);
    }
 
    // Create feature
@@ -340,12 +332,7 @@ int SaperaGigE::Initialize()
    pAct = new CPropertyAction(this, &SaperaGigE::OnTemperature);
    ret = CreateProperty("Device Temperature", "-1.0", MM::Float, true, pAct);
    assert(ret == DEVICE_OK);
-   //AcqDevice_.GetFeatureInfo("DeviceTemperature", &feature);
-   //feature.GetMax(&high);
-   //feature.GetMin(&low);
-   //SetPropertyLimits("Device Temperature", low, high);
-
-
+   
    // synchronize all properties
    // --------------------------
    ret = UpdateStatus();
@@ -665,25 +652,6 @@ bool SaperaGigE::IsCapturing() {
 // SaperaGigE Action handlers
 ///////////////////////////////////////////////////////////////////////////////
 
-// Sapera Configuration file (CCF)
-int SaperaGigE::OnConfigFile(MM::PropertyBase* pProp, MM::ActionType eAct)
-{
-	if (eAct == MM::AfterSet)
-	{
-		string configFile;
-		pProp->Get(configFile);
-		AcqDevice_.LoadFeatures(configFile.c_str());
-	}
-	else if (eAct == MM::BeforeGet)
-	{
-		const char* configFile = AcqDevice_.GetConfigFile();
-		pProp->Set(configFile);
-	}
-
-	return DEVICE_OK;
-}
-
-
 /**
 * Handles "Binning" property.
 */
@@ -722,6 +690,8 @@ int SaperaGigE::OnTemperature(MM::PropertyBase* pProp, MM::ActionType eAct)
 	{
 		return DEVICE_CAN_NOT_SET_PROPERTY;
 	}
+
+	return DEVICE_OK;
 }
 
 /**
@@ -734,8 +704,7 @@ int SaperaGigE::OnPixelType(MM::PropertyBase* pProp, MM::ActionType eAct)
 	//return DEVICE_OK;
    if (eAct == MM::AfterSet)
    {
-	   //SapManager::DisplayMessage("(Sapera app)OnPixelType MM:AfterSet");
-      string val;
+	  string val;
       pProp->Get(val);
       if (val.compare(g_PixelType_8bit) == 0)
 	  {

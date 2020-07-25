@@ -42,7 +42,7 @@
 class SequenceThread;
 
 
-const std::map< std::string, std::string > deviceInfoFeatures = {
+const std::map< std::string, std::string > deviceInfoFeaturesStr = {
     // information on device - use names shown in Sapera CamExpert
     {"Manufacturer Name", "DeviceVendorName"},
     {"Family Name", "DeviceFamilyName"},
@@ -53,11 +53,22 @@ const std::map< std::string, std::string > deviceInfoFeatures = {
     {"Firmware Version", "DeviceFirmwareVersion"},
     {"Serial Number", "DeviceSerialNumber"},
     {"Device User ID", "DeviceUserID"},
-    {"MAC Address", "deviceMacAddress"}
+    {"MAC Address", "deviceMacAddress"},
+    {"Sensor Type", "sensorColorType"},
+    {"Sensor Pixel Format", "PixelFormat"},
+    {"Sensor Pixel Coding", "PixelCoding"},
+    {"SensorBlackLevel", "BlackLevel"},
+    {"SensorPixelInput", "pixelSizeInput"},
+    {"SensorShutterMode", "SensorShutterMode"}
+};
+
+const std::map< std::string, std::string > deviceInfoFeaturesInt = {
+    {"SensorWidth", "SensorWidth"},
+    {"SensorHeight", "SensorHeight"},
+    {"Sensor Pixel Size", "PixelSize"},
 };
 
 const char* g_CameraServerNameProperty = "AcquisitionDevice";
-const char* g_CameraConfigFilenameProperty = "SaperaConfigFile";
 
 class SaperaGigE : public CCameraBase<SaperaGigE>  
 {
@@ -97,7 +108,6 @@ public:
 
    // action interface
    // ----------------
-   int OnConfigFile(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnBinning(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnTemperature(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnPixelType(MM::PropertyBase* pProp, MM::ActionType eAct);
