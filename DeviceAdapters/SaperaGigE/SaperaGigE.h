@@ -56,6 +56,8 @@ const std::map< std::string, std::string > deviceInfoFeatures = {
     {"MAC Address", "deviceMacAddress"}
 };
 
+const char* g_CameraServerNameProperty = "AcquisitionDevice";
+const char* g_CameraConfigFilenameProperty = "SaperaConfigFile";
 
 class SaperaGigE : public CCameraBase<SaperaGigE>  
 {
@@ -95,6 +97,7 @@ public:
 
    // action interface
    // ----------------
+   int OnConfigFile(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnBinning(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnTemperature(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnPixelType(MM::PropertyBase* pProp, MM::ActionType eAct);
@@ -110,7 +113,6 @@ private:
    int binning_;
    int bytesPerPixel_;
    int bitsPerPixel_;
-   double gain_;
    double exposureMs_;
    bool initialized_;
    ImgBuffer img_;
@@ -121,9 +123,8 @@ private:
    void GenerateImage();
    int InsertImage();
 
-   UINT32 acqDeviceNumber_;
-   char* acqServerName_;
-   char* configFilename_;
+   std::vector<std::string> acqDeviceList_;
+
    SapAcquisition Acq_;
    SapAcqDevice AcqDevice_;
    SapBufferWithTrash Buffers_;

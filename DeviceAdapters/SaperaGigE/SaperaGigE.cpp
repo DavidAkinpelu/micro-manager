@@ -21,13 +21,7 @@ const char* g_PixelType_12bit = "12bit";
 
 // g_CameraAcqDeviceNumberProperty
 // g_CameraServerNameProperty
-// g_CameraConfigFilenameProperty
-const char* g_CameraAcqDeviceNumberProperty = "Acquisition Device Number";
-const char* g_CameraAcqDeviceNumber_Def = "0";
-const char* g_CameraServerNameProperty = "Server Name";
-const char* g_CameraServerName_Def = "Nano-M1930-NIR_1";
-const char* g_CameraConfigFilenameProperty = "Config Filename";
-const char* g_CameraConfigFilename_Def = "NoFile";
+//const char* g_CameraAcqDeviceNumberProperty = "Acquisition Device Number";
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -80,7 +74,6 @@ MODULE_API void DeleteDevice(MM::Device* pDevice)
 */
 SaperaGigE::SaperaGigE() :
    binning_ (1),
-   gain_(1),
    bytesPerPixel_(1),
    bitsPerPixel_(8),
    initialized_(false),
@@ -90,7 +83,7 @@ SaperaGigE::SaperaGigE() :
    sequenceRunning_(false),
    SapFormatBytes_(1)
 {
-    // call the base class method to set-up default error codes/messages
+   // call the base class method to set-up default error codes/messages
    InitializeDefaultErrorMessages();
 
    // Description property
@@ -99,28 +92,6 @@ SaperaGigE::SaperaGigE() :
 
    // camera type pre-initialization property
 
-   // Sapera++ library stuff
-
-   int serverCount = SapManager::GetServerCount();
-   if(serverCount == 0)
-   {
-	   ErrorBox((LPCWSTR)L"Initialization Error", (LPCWSTR)L"No servers!");
-   }
-
-   acqServerName_ = new char[CORSERVER_MAX_STRLEN];
-   configFilename_ = new char[MAX_PATH];
-
-   ret = CreateProperty(g_CameraAcqDeviceNumberProperty, g_CameraAcqDeviceNumber_Def, MM::Integer, false, 0, true);
-   assert(ret == DEVICE_OK);
-
-   ret = CreateProperty(g_CameraServerNameProperty, g_CameraServerName_Def, MM::String, false, 0, true);
-   assert(ret == DEVICE_OK);
-
-   ret = CreateProperty(g_CameraConfigFilenameProperty, g_CameraConfigFilename_Def, MM::String, false, 0, true);
-   assert(ret == DEVICE_OK);
-
-   // create live video thread
-   thd_ = new SequenceThread(this);
 }
 
 /**
@@ -158,62 +129,63 @@ int SaperaGigE::Initialize()
    if (initialized_)
       return DEVICE_OK;
 
-   //SapManager::DisplayMessage("This plugin logs debug messages.  Press no so they don't all pop up like this.");
-   // set property list
-   // -----------------
+   CPropertyAction* pAct;
 
-   // binning
-   CPropertyAction *pAct = new CPropertyAction (this, &SaperaGigE::OnBinning);
-   //@TODO: Check what the actual binning value is and set that
-   // For now, set binning to 1 for MM and set that on the camera later
-   int ret = CreateProperty(MM::g_Keyword_Binning, "1", MM::Integer, false, pAct);
+   // Sapera++ library stuff
+   int serverCount = 0;
+   if (SapManager::DetectAllServers(SapManager::DetectServerAll))
+   {
+	   serverCount = SapManager::GetServerCount();
+   }
+   else
+   {
+	   LogMessage("No CameraLink camera servers detected", false);
+	   return DEVICE_NATIVE_MODULE_FAILED;
+   }
+
+   char serverName[CORSERVER_MAX_STRLEN];
+   for (int serverIndex = 0; serverIndex < serverCount; serverIndex++)
+   {
+	   if (SapManager::GetResourceCount(serverIndex, SapManager::ResourceAcqDevice) != 0)
+	   {
+		   // Get Server Name Value
+		   SapManager::GetServerName(serverIndex, serverName, sizeof(serverName));
+		   acqDeviceList_.push_back(serverName);
+	   }
+   }
+
+   if (acqDeviceList_.size() == 0)
+   {
+	   ErrorBox((LPCWSTR)L"Initialization Error", (LPCWSTR)L"No servers!");
+   }
+
+   int ret = CreateProperty(g_CameraServerNameProperty, acqDeviceList_[0].c_str(), MM::String, false, 0, false);
    assert(ret == DEVICE_OK);
 
-   vector<string> binningValues;
-   binningValues.push_back("1");
-   binningValues.push_back("2"); 
-   binningValues.push_back("4");
-
-   ret = SetAllowedValues(MM::g_Keyword_Binning, binningValues);
+   ret = SetAllowedValues(g_CameraServerNameProperty, acqDeviceList_);
    assert(ret == DEVICE_OK);
+
+   // create live video thread
+   thd_ = new SequenceThread(this);
+
 
    //Sapera stuff
-   // g_CameraAcqDeviceNumberProperty
-   // g_CameraServerNameProperty
-   // g_CameraConfigFilenameProperty
-   long tmpDeviceNumber;
-   if(GetProperty(g_CameraAcqDeviceNumberProperty, tmpDeviceNumber) != DEVICE_OK)
-   {
-	   //SapManager::DisplayMessage("Failed to retrieve AcqDeviceNumberProperty");
-	   return DEVICE_ERR;
-   }
-   acqDeviceNumber_ = (UINT32)tmpDeviceNumber;
 
-   if(false)//GetProperty(g_CameraServerNameProperty, acqServerName_) != DEVICE_OK)
-   {
-	   //SapManager::DisplayMessage("Failed to retrieve ServerNameProperty");
-	   return DEVICE_ERR;
-   }
-   acqServerName_ = (char *)g_CameraServerName_Def;
-
-   if(false)//GetProperty(g_CameraConfigFilenameProperty, configFilename_) != DEVICE_OK)
-   {
-	   //SapManager::DisplayMessage("Failed to retrieve ConfigFilenameProperty");
-	   return DEVICE_ERR;
-   }
-   configFilename_ = "NoFile";
+   pAct = new CPropertyAction(this, &SaperaGigE::OnConfigFile);
+   ret = CreateProperty(g_CameraConfigFilenameProperty, "no file", MM::String, false, pAct);
+   assert(ret == DEVICE_OK);
 
    //SapManager::DisplayMessage("(Sapera app)Creating loc_ object");
-   SapLocation loc_(acqServerName_, acqDeviceNumber_);
+   SapLocation loc_(acqDeviceList_[0].c_str());
    //SapManager::DisplayMessage("(Sapera app)Created loc_ object");
    //SapManager::DisplayMessage("(Sapera app)GetResourceCount for ResourceAcqDevice starting"); 
-   if(SapManager::GetResourceCount(acqServerName_, SapManager::ResourceAcqDevice) > 0)
-   {
+   //if(SapManager::GetResourceCount(acqServerName_, SapManager::ResourceAcqDevice) > 0)
+   //{
 	   //SapManager::DisplayMessage("(Sapera app)GetResourceCount for ResourceAcqDevice found something");
-	   if(strcmp(configFilename_, "NoFile") == 0)
-		   AcqDevice_ = SapAcqDevice(loc_, false);
-	   else
-		   AcqDevice_ = SapAcqDevice(loc_, configFilename_);
+	   //if(strcmp(configFilename_, "NoFile") == 0)
+	   AcqDevice_ = SapAcqDevice(loc_, false);
+	   //else
+	   //   AcqDevice_ = SapAcqDevice(loc_, configFilename_);
 
 	   Buffers_ = SapBufferWithTrash(2, &AcqDevice_);
 	   AcqDeviceToBuf_ = SapAcqDeviceToBuf(&AcqDevice_, &Buffers_);
@@ -230,7 +202,7 @@ int SaperaGigE::Initialize()
 		   //SapManager::DisplayMessage("Failed to create Acq_ for ResourceAcqDevice");
 		   return DEVICE_INVALID_INPUT_PARAM;
 	   }
-   }
+   //}
    //SapManager::DisplayMessage("(Sapera app)GetResourceCount for ResourceAcqDevice done");
    //SapManager::DisplayMessage("(Sapera app)Creating Buffers_");
    if(!Buffers_.Create())
@@ -253,6 +225,26 @@ int SaperaGigE::Initialize()
 	//Start continuous grab
 	//Xfer_->Grab();
 	//SapManager::DisplayMessage("(Sapera app)Sapera Initialization for SaperaGigE complete");
+
+
+   // set property list
+   // -----------------
+
+   // binning
+   pAct = new CPropertyAction(this, &SaperaGigE::OnBinning);
+   //@TODO: Check what the actual binning value is and set that
+   // For now, set binning to 1 for MM and set that on the camera later
+   ret = CreateProperty(MM::g_Keyword_Binning, "1", MM::Integer, false, pAct);
+   assert(ret == DEVICE_OK);
+
+   vector<string> binningValues;
+   binningValues.push_back("1");
+   binningValues.push_back("2");
+   binningValues.push_back("4");
+
+   ret = SetAllowedValues(MM::g_Keyword_Binning, binningValues);
+   assert(ret == DEVICE_OK);
+
 
 	if(!AcqDevice_.GetFeatureValue("ExposureTime", &exposureMs_))
 		return DEVICE_ERR;
@@ -315,23 +307,23 @@ int SaperaGigE::Initialize()
    if(!AcqDevice_.SetFeatureValue("BinningHorizontal", 1))
 	   return DEVICE_ERR;
 
+   // Device information
+   for (auto const& x : deviceInfoFeatures)
+   {
+	   char value[512];
+	   if (!AcqDevice_.GetFeatureValue(x.second.c_str(), value, sizeof(value)))
+		   return DEVICE_ERR;
+
+	   string s = value;
+	   ret = CreateProperty(x.first.c_str(), s.c_str(), MM::String, true);
+   }
+
    // Create feature
    SapFeature feature(loc_);
    if (!feature.Create())
 	   return DEVICE_ERR;
    double low = 0.0;
    double high = 0.0;
-
-   // Device information
-   for (auto const& x : deviceInfoFeatures)
-   {
-	   char value[512];
-	   if (!AcqDevice_.GetFeatureValue(x.second.c_str(), value, 512))
-		   return DEVICE_ERR;
-
-	   string s = value;
-	   ret = CreateProperty(x.first.c_str(), s.c_str(), MM::String, true);
-   }
 
    // Setup gain
    pAct = new CPropertyAction(this, &SaperaGigE::OnGain);
@@ -348,10 +340,10 @@ int SaperaGigE::Initialize()
    pAct = new CPropertyAction(this, &SaperaGigE::OnTemperature);
    ret = CreateProperty("Device Temperature", "-1.0", MM::Float, true, pAct);
    assert(ret == DEVICE_OK);
-   AcqDevice_.GetFeatureInfo("DeviceTemperature", &feature);
-   feature.GetMax(&high);
-   feature.GetMin(&low);
-   SetPropertyLimits("Device Temperature", low, high);
+   //AcqDevice_.GetFeatureInfo("DeviceTemperature", &feature);
+   //feature.GetMax(&high);
+   //feature.GetMin(&low);
+   //SetPropertyLimits("Device Temperature", low, high);
 
 
    // synchronize all properties
@@ -673,6 +665,25 @@ bool SaperaGigE::IsCapturing() {
 // SaperaGigE Action handlers
 ///////////////////////////////////////////////////////////////////////////////
 
+// Sapera Configuration file (CCF)
+int SaperaGigE::OnConfigFile(MM::PropertyBase* pProp, MM::ActionType eAct)
+{
+	if (eAct == MM::AfterSet)
+	{
+		string configFile;
+		pProp->Get(configFile);
+		AcqDevice_.LoadFeatures(configFile.c_str());
+	}
+	else if (eAct == MM::BeforeGet)
+	{
+		const char* configFile = AcqDevice_.GetConfigFile();
+		pProp->Set(configFile);
+	}
+
+	return DEVICE_OK;
+}
+
+
 /**
 * Handles "Binning" property.
 */
@@ -779,15 +790,16 @@ int SaperaGigE::OnPixelType(MM::PropertyBase* pProp, MM::ActionType eAct)
 */
 int SaperaGigE::OnGain(MM::PropertyBase* pProp, MM::ActionType eAct)
 {
-   if (eAct == MM::AfterSet)
+	double gain = 1.;
+	if (eAct == MM::AfterSet)
    {
-	   //SapManager::DisplayMessage("(Sapera app)OnGain MM:AfterSet");
-      pProp->Get(gain_);
-	  AcqDevice_.SetFeatureValue("Gain", gain_);
+      pProp->Get(gain);
+	  AcqDevice_.SetFeatureValue("Gain", gain);
    }
    else if (eAct == MM::BeforeGet)
    {
-      pProp->Set(gain_);
+		AcqDevice_.GetFeatureValue("Gain", &gain);
+		pProp->Set(gain);
    }
 
    return DEVICE_OK;
