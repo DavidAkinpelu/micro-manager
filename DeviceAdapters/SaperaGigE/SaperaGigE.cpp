@@ -151,7 +151,8 @@ int SaperaGigE::Initialize()
 
    if (acqDeviceList_.size() == 0)
    {
-	   ErrorBox((LPCWSTR)L"Initialization Error", (LPCWSTR)L"No servers!");
+	   ErrorBox("Initialization Error", "No servers!");
+	   return DEVICE_NATIVE_MODULE_FAILED;
    }
 
    int ret = CreateProperty(g_CameraServerNameProperty, acqDeviceList_[0].c_str(), MM::String, false, 0, false);
@@ -225,11 +226,6 @@ int SaperaGigE::Initialize()
    ret = SetAllowedValues(MM::g_Keyword_Binning, binningValues);
    assert(ret == DEVICE_OK);
 
-
-	if(!AcqDevice_.GetFeatureValue("ExposureTime", &exposureMs_))
-		return DEVICE_ERR;
-	exposureMs_ = exposureMs_ / 1000;
-
 	// synchronize bit depth with camera
 
 	char acqFormat[10];
@@ -290,7 +286,7 @@ int SaperaGigE::Initialize()
 	   AcqDevice_.IsFeatureAvailable(x.second.c_str(), &isAvailable);
 	   if (!isAvailable)
 		   continue;
-	   char value[512];
+	   char value[MM::MaxStrLength];
 	   if (!AcqDevice_.GetFeatureValue(x.second.c_str(), value, sizeof(value)))
 		   return DEVICE_ERR;
 
@@ -302,11 +298,16 @@ int SaperaGigE::Initialize()
    // Device information
    for (auto const& x : deviceInfoFeaturesInt)
    {
+	   BOOL isAvailable;
+	   AcqDevice_.IsFeatureAvailable(x.second.c_str(), &isAvailable);
+	   if (!isAvailable)
+		   continue;
 	   UINT32 value;
 	   if (!AcqDevice_.GetFeatureValue(x.second.c_str(), &value))
 		   return DEVICE_ERR;
 
-	   ret = CreateProperty(x.first.c_str(), std::to_string(value).c_str(), MM::Integer, true);
+	   string s = std::to_string(value);
+	   ret = CreateProperty(x.first.c_str(), s.c_str(), MM::Integer, true);
 	   assert(ret == DEVICE_OK);
    }
 
@@ -317,7 +318,7 @@ int SaperaGigE::Initialize()
    double low = 0.0;
    double high = 0.0;
 
-   // Setup gain
+   // Set up gain
    pAct = new CPropertyAction(this, &SaperaGigE::OnGain);
    ret = CreateProperty(MM::g_Keyword_Gain, "1.0", MM::Float, false, pAct);
    assert(ret == DEVICE_OK);
@@ -327,6 +328,17 @@ int SaperaGigE::Initialize()
    feature.GetMax(&high);
    feature.GetMin(&low);
    SetPropertyLimits(MM::g_Keyword_Gain, low, high);
+
+   // Set up exposure
+   pAct = new CPropertyAction(this, &SaperaGigE::OnExposure);
+   ret = CreateProperty(MM::g_Keyword_Exposure, "1.0", MM::Float, false, pAct);
+   assert(ret == DEVICE_OK);
+   if (!AcqDevice_.SetFeatureValue("ExposureTime", 1000.0)) // us
+	   return DEVICE_ERR;
+   AcqDevice_.GetFeatureInfo("ExposureTime", &feature);
+   feature.GetMax(&high); // us
+   feature.GetMin(&low); // us
+   SetPropertyLimits(MM::g_Keyword_Exposure, low / 1000., high / 1000.);
 
    // Set up temperature
    pAct = new CPropertyAction(this, &SaperaGigE::OnTemperature);
@@ -382,9 +394,9 @@ int SaperaGigE::FreeHandles()
 	return DEVICE_OK;
 }
 
-int SaperaGigE::ErrorBox(LPCWSTR text, LPCWSTR caption)
+int SaperaGigE::ErrorBox(std::string text, std::string caption)
 {
-	return MessageBox(NULL, caption, text, (MB_ICONERROR | MB_OK));
+	return MessageBox(NULL, (LPCWSTR)caption.c_str(), (LPCWSTR)text.c_str(), (MB_ICONERROR | MB_OK));
 }
 
 /**
@@ -542,7 +554,11 @@ int SaperaGigE::ClearROI()
 */
 double SaperaGigE::GetExposure() const
 {
-   return exposureMs_;
+   char buf[MM::MaxStrLength];
+   int ret = GetProperty(MM::g_Keyword_Exposure, buf);
+   if (ret != DEVICE_OK)
+	   return 0.0;
+   return atof(buf);
 }
 
 /**
@@ -551,12 +567,8 @@ double SaperaGigE::GetExposure() const
 */
 void SaperaGigE::SetExposure(double exp)
 {
-   exposureMs_ = exp;
-   // Micromanager deals with exposure time in ms
-   // Sapera deals with exposure time in us
-   // As such, we convert between the two
-   AcqDevice_.SetFeatureValue("ExposureTime", (exposureMs_ * 1000));
-}
+   int ret = SetProperty(MM::g_Keyword_Exposure, std::to_string(exp).c_str());
+ }
 
 /**
 * Returns the current binning factor.
@@ -774,6 +786,29 @@ int SaperaGigE::OnGain(MM::PropertyBase* pProp, MM::ActionType eAct)
    return DEVICE_OK;
 }
 
+int SaperaGigE::OnExposure(MM::PropertyBase* pProp, MM::ActionType eAct)
+{
+	// note that GigE units of exposure are us; umanager uses ms
+	if (eAct == MM::AfterSet)
+	{
+			double oldd = 0, newd = 0;
+			AcqDevice_.GetFeatureValue("ExposureTime", &oldd); // us
+			pProp->Get(newd);  // ms
+			if (!AcqDevice_.SetFeatureValue("ExposureTime", newd * 1000.0)) // ms to us
+			{
+				pProp->Set(oldd / 1000.0);  // us to ms
+				return DEVICE_INVALID_PROPERTY_VALUE;
+			}
+	}
+	else if (eAct == MM::BeforeGet)
+	{
+			double d = 0;
+			if (AcqDevice_.GetFeatureValue("ExposureTime", &d)) // us
+				pProp->Set(d / 1000.0);
+	}
+	return DEVICE_OK;
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // Private SaperaGigE methods
@@ -798,7 +833,8 @@ void SaperaGigE::GenerateImage()
    const double maxExp = 1000;
    double step = maxValue/maxExp;
    unsigned char* pBuf = const_cast<unsigned char*>(img_.GetPixels());
-   memset(pBuf, (int) (step * max(exposureMs_, maxExp)), img_.Height()*img_.Width()*img_.Depth());
+   double exposureMs = GetExposure();
+   memset(pBuf, (int) (step * max(exposureMs, maxExp)), img_.Height()*img_.Width()*img_.Depth());
 }
 
 /*

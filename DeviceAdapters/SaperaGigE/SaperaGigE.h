@@ -41,7 +41,6 @@
 
 class SequenceThread;
 
-
 const std::map< std::string, std::string > deviceInfoFeaturesStr = {
     // information on device - use names shown in Sapera CamExpert
     {"Manufacturer Name", "DeviceVendorName"},
@@ -59,7 +58,8 @@ const std::map< std::string, std::string > deviceInfoFeaturesStr = {
     {"Sensor Pixel Coding", "PixelCoding"},
     {"SensorBlackLevel", "BlackLevel"},
     {"SensorPixelInput", "pixelSizeInput"},
-    {"SensorShutterMode", "SensorShutterMode"}
+    {"SensorShutterMode", "SensorShutterMode"},
+    {"SensorBinningMode", "BinningMode"}
 };
 
 const std::map< std::string, std::string > deviceInfoFeaturesInt = {
@@ -112,6 +112,7 @@ public:
    int OnTemperature(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnPixelType(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnGain(MM::PropertyBase* pProp, MM::ActionType eAct);
+   int OnExposure(MM::PropertyBase* pProp, MM::ActionType eAct);
 
 private:
    friend class SequenceThread;
@@ -123,7 +124,6 @@ private:
    int binning_;
    int bytesPerPixel_;
    int bitsPerPixel_;
-   double exposureMs_;
    bool initialized_;
    ImgBuffer img_;
    int roiX_, roiY_;
@@ -145,7 +145,7 @@ private:
    int SapFormatBytes_;
 
    int FreeHandles();
-   int ErrorBox(LPCWSTR text, LPCWSTR caption);
+   int ErrorBox(std::string text, std::string caption);
    LPCWSTR SaperaGigE::string2winstring(const std::string& s);
    int SapBufferReformat(SapFormat format, const char * acqFormat);
 };
