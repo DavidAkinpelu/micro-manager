@@ -133,8 +133,8 @@ private:
     int InsertImage();
 
     std::vector<std::string> acqDeviceList_;
-
-    SapAcquisition Acq_;
+    std::string activeDevice_;
+    //SapAcquisition Acq_;
     SapAcqDevice AcqDevice_;
     SapBufferWithTrash Buffers_;
     SapTransfer AcqToBuf_;

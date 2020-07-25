@@ -84,7 +84,45 @@ SaperaGigE::SaperaGigE() :
     int ret = CreateProperty(MM::g_Keyword_Description, "Sapera GigE Camera Adapter", MM::String, true);
     assert(ret == DEVICE_OK);
 
-    // camera type pre-initialization property
+    // Sapera++ library stuff
+    int serverCount = 0;
+    if (SapManager::DetectAllServers(SapManager::DetectServerAll))
+    {
+        serverCount = SapManager::GetServerCount();
+    }
+    else
+    {
+        LogMessage("No CameraLink camera servers detected", false);
+        assert(false);
+        //return DEVICE_NATIVE_MODULE_FAILED;
+    }
+
+    char serverName[CORSERVER_MAX_STRLEN];
+    for (int serverIndex = 0; serverIndex < serverCount; serverIndex++)
+    {
+        if (SapManager::GetResourceCount(serverIndex, SapManager::ResourceAcqDevice) != 0)
+        {
+            // Get Server Name Value
+            SapManager::GetServerName(serverIndex, serverName, sizeof(serverName));
+            acqDeviceList_.push_back(serverName);
+        }
+    }
+
+    if (acqDeviceList_.size() == 0)
+    {
+        ErrorBox("Initialization Error", "No servers!");
+        assert(false);
+        //return DEVICE_NATIVE_MODULE_FAILED;
+    }
+
+    ret = CreateProperty(g_CameraServerNameProperty, acqDeviceList_[0].c_str(), MM::String, false, 0, false);
+    assert(ret == DEVICE_OK);
+
+    ret = SetAllowedValues(g_CameraServerNameProperty, acqDeviceList_);
+    assert(ret == DEVICE_OK);
+
+    // set active device to first server in the list
+    activeDevice_ = acqDeviceList_[0];
 }
 
 /**
@@ -122,68 +160,26 @@ int SaperaGigE::Initialize()
     if (initialized_)
         return DEVICE_OK;
 
+    int ret;
     CPropertyAction* pAct;
-
-    // Sapera++ library stuff
-    int serverCount = 0;
-    if (SapManager::DetectAllServers(SapManager::DetectServerAll))
-    {
-        serverCount = SapManager::GetServerCount();
-    }
-    else
-    {
-        LogMessage("No CameraLink camera servers detected", false);
-        return DEVICE_NATIVE_MODULE_FAILED;
-    }
-
-    char serverName[CORSERVER_MAX_STRLEN];
-    for (int serverIndex = 0; serverIndex < serverCount; serverIndex++)
-    {
-        if (SapManager::GetResourceCount(serverIndex, SapManager::ResourceAcqDevice) != 0)
-        {
-            // Get Server Name Value
-            SapManager::GetServerName(serverIndex, serverName, sizeof(serverName));
-            acqDeviceList_.push_back(serverName);
-        }
-    }
-
-    if (acqDeviceList_.size() == 0)
-    {
-        ErrorBox("Initialization Error", "No servers!");
-        return DEVICE_NATIVE_MODULE_FAILED;
-    }
-
-    int ret = CreateProperty(g_CameraServerNameProperty, acqDeviceList_[0].c_str(), MM::String, false, 0, false);
-    assert(ret == DEVICE_OK);
-
-    ret = SetAllowedValues(g_CameraServerNameProperty, acqDeviceList_);
-    assert(ret == DEVICE_OK);
 
     // create live video thread
     thd_ = new SequenceThread(this);
 
-    SapLocation loc_(acqDeviceList_[0].c_str());
-    //if(SapManager::GetResourceCount(acqServerName_, SapManager::ResourceAcqDevice) > 0)
-    //{
+    SapLocation loc_(activeDevice_.c_str());
     AcqDevice_ = SapAcqDevice(loc_, false);
     Buffers_ = SapBufferWithTrash(2, &AcqDevice_);
     AcqDeviceToBuf_ = SapAcqDeviceToBuf(&AcqDevice_, &Buffers_);
     Xfer_ = &AcqDeviceToBuf_;
+    feature_ = SapFeature(loc_);
 
     if (!AcqDevice_.Create())
     {
         ret = FreeHandles();
         if (ret != DEVICE_OK)
-        {
-            //SapManager::DisplayMessage("Failed to FreeHandles during Acq_.Create() for ResourceAcqDevice");
             return ret;
-        }
-        //SapManager::DisplayMessage("Failed to create Acq_ for ResourceAcqDevice");
         return DEVICE_INVALID_INPUT_PARAM;
     }
-    //}
-    //SapManager::DisplayMessage("(Sapera app)GetResourceCount for ResourceAcqDevice done");
-    //SapManager::DisplayMessage("(Sapera app)Creating Buffers_");
     if (!Buffers_.Create())
     {
         ret = FreeHandles();
@@ -191,24 +187,20 @@ int SaperaGigE::Initialize()
             return ret;
         return DEVICE_NATIVE_MODULE_FAILED;
     }
-    //SapManager::DisplayMessage("(Sapera app)Creating Xfer_");
     if (Xfer_ && !Xfer_->Create())
     {
-        //SapManager::DisplayMessage("Xfer_ creation failed");
         ret = FreeHandles();
         if (ret != DEVICE_OK)
             return ret;
         return DEVICE_NATIVE_MODULE_FAILED;
     }
-    //SapManager::DisplayMessage("(Sapera app)Starting Xfer");
-    //Start continuous grab
-    //Xfer_->Grab();
-    //SapManager::DisplayMessage("(Sapera app)Sapera Initialization for SaperaGigE complete");
-
-    // Create feature
-    feature_ = SapFeature(loc_);
     if (!feature_.Create())
-        return DEVICE_ERR;
+    {
+        ret = FreeHandles();
+        if (ret != DEVICE_OK)
+            return ret;
+        return DEVICE_NATIVE_MODULE_FAILED;
+    }
 
     // set property list
     // -----------------
@@ -369,7 +361,8 @@ int SaperaGigE::FreeHandles()
 {
     if (Xfer_ && *Xfer_ && !Xfer_->Destroy()) return DEVICE_ERR;
     if (!Buffers_.Destroy()) return DEVICE_ERR;
-    if (!Acq_.Destroy()) return DEVICE_ERR;
+    //if (!Acq_.Destroy()) return DEVICE_ERR;
+    if (!feature_.Destroy()) return DEVICE_ERR;
     if (!AcqDevice_.Destroy()) return DEVICE_ERR;
     return DEVICE_OK;
 }
