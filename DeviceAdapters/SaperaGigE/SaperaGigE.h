@@ -121,7 +121,6 @@ private:
     static const int MAX_BIT_DEPTH = 12;
 
     SequenceThread* thd_;
-    int binning_;
     int bytesPerPixel_;
     int bitsPerPixel_;
     bool initialized_;
@@ -142,10 +141,12 @@ private:
     SapTransfer AcqDeviceToBuf_;
     SapTransfer* Xfer_;
     SapLocation loc_;
+    SapFeature feature_;
     int SapFormatBytes_;
 
     int FreeHandles();
     int ErrorBox(std::string text, std::string caption);
+    int SetUpBinningProperties();
     LPCWSTR SaperaGigE::string2winstring(const std::string& s);
     int SapBufferReformat(SapFormat format, const char* acqFormat);
 };

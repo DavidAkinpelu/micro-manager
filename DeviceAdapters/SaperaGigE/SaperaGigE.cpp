@@ -68,7 +68,6 @@ MODULE_API void DeleteDevice(MM::Device* pDevice)
 * perform most of the initialization in the Initialize() method.
 */
 SaperaGigE::SaperaGigE() :
-    binning_(1),
     bytesPerPixel_(1),
     bitsPerPixel_(8),
     initialized_(false),
@@ -206,26 +205,20 @@ int SaperaGigE::Initialize()
     //Xfer_->Grab();
     //SapManager::DisplayMessage("(Sapera app)Sapera Initialization for SaperaGigE complete");
 
-   // set property list
-   // -----------------
+    // Create feature
+    feature_ = SapFeature(loc_);
+    if (!feature_.Create())
+        return DEVICE_ERR;
 
-   // binning
-    pAct = new CPropertyAction(this, &SaperaGigE::OnBinning);
-    //@TODO: Check what the actual binning value is and set that
-    // For now, set binning to 1 for MM and set that on the camera later
-    ret = CreateProperty(MM::g_Keyword_Binning, "1", MM::Integer, false, pAct);
-    assert(ret == DEVICE_OK);
+    // set property list
+    // -----------------
 
-    vector<string> binningValues;
-    binningValues.push_back("1");
-    binningValues.push_back("2");
-    binningValues.push_back("4");
-
-    ret = SetAllowedValues(MM::g_Keyword_Binning, binningValues);
-    assert(ret == DEVICE_OK);
+     // binning
+    ret = SetUpBinningProperties();
+    if (ret != DEVICE_OK)
+        return ret;
 
     // synchronize bit depth with camera
-
     char acqFormat[10];
     AcqDevice_.GetFeatureValue("PixelFormat", acqFormat, sizeof(acqFormat));
     if (strcmp(acqFormat, "Mono8") == 0)
@@ -271,12 +264,6 @@ int SaperaGigE::Initialize()
     ret = SetAllowedValues(MM::g_Keyword_PixelType, pixelTypeValues);
     assert(ret == DEVICE_OK);
 
-    // Set Binning to 1
-    if (!AcqDevice_.SetFeatureValue("BinningVertical", 1))
-        return DEVICE_ERR;
-    if (!AcqDevice_.SetFeatureValue("BinningHorizontal", 1))
-        return DEVICE_ERR;
-
     // Device information
     for (auto const& x : deviceInfoFeaturesStr)
     {
@@ -304,15 +291,10 @@ int SaperaGigE::Initialize()
         if (!AcqDevice_.GetFeatureValue(x.second.c_str(), &value))
             return DEVICE_ERR;
 
-        string s = std::to_string(value);
-        ret = CreateProperty(x.first.c_str(), s.c_str(), MM::Integer, true);
+        ret = CreateProperty(x.first.c_str(), CDeviceUtils::ConvertToString((long)value), MM::Integer, true);
         assert(ret == DEVICE_OK);
     }
 
-    // Create feature
-    SapFeature feature(loc_);
-    if (!feature.Create())
-        return DEVICE_ERR;
     double low = 0.0;
     double high = 0.0;
 
@@ -322,9 +304,9 @@ int SaperaGigE::Initialize()
     assert(ret == DEVICE_OK);
     if (!AcqDevice_.SetFeatureValue("Gain", 1.0))
         return DEVICE_ERR;
-    AcqDevice_.GetFeatureInfo("Gain", &feature);
-    feature.GetMax(&high);
-    feature.GetMin(&low);
+    AcqDevice_.GetFeatureInfo("Gain", &feature_);
+    feature_.GetMax(&high);
+    feature_.GetMin(&low);
     SetPropertyLimits(MM::g_Keyword_Gain, low, high);
 
     // Set up exposure
@@ -333,9 +315,9 @@ int SaperaGigE::Initialize()
     assert(ret == DEVICE_OK);
     if (!AcqDevice_.SetFeatureValue("ExposureTime", 1000.0)) // us
         return DEVICE_ERR;
-    AcqDevice_.GetFeatureInfo("ExposureTime", &feature);
-    feature.GetMax(&high); // us
-    feature.GetMin(&low); // us
+    AcqDevice_.GetFeatureInfo("ExposureTime", &feature_);
+    feature_.GetMax(&high); // us
+    feature_.GetMin(&low); // us
     SetPropertyLimits(MM::g_Keyword_Exposure, low / 1000., high / 1000.);
 
     // Set up temperature
@@ -565,7 +547,7 @@ double SaperaGigE::GetExposure() const
 */
 void SaperaGigE::SetExposure(double exp)
 {
-    int ret = SetProperty(MM::g_Keyword_Exposure, std::to_string(exp).c_str());
+    int ret = SetProperty(MM::g_Keyword_Exposure, CDeviceUtils::ConvertToString(exp));
 }
 
 /**
@@ -574,7 +556,11 @@ void SaperaGigE::SetExposure(double exp)
 */
 int SaperaGigE::GetBinning() const
 {
-    return binning_;
+    char buf[MM::MaxStrLength];
+    int ret = GetProperty(MM::g_Keyword_Binning, buf);
+    if (ret != DEVICE_OK)
+        return 1;
+    return atoi(buf);
 }
 
 /**
@@ -668,16 +654,18 @@ int SaperaGigE::OnBinning(MM::PropertyBase* pProp, MM::ActionType eAct)
     {
         long binSize;
         pProp->Get(binSize);
-        binning_ = (int)binSize;
-        if (!AcqDevice_.SetFeatureValue("BinningVertical", binning_))
+        if (!AcqDevice_.SetFeatureValue("BinningVertical", int(binSize)))
             return DEVICE_ERR;
-        if (!AcqDevice_.SetFeatureValue("BinningHorizontal", binning_))
+        if (!AcqDevice_.SetFeatureValue("BinningHorizontal", int(binSize)))
             return DEVICE_ERR;
         return ResizeImageBuffer();
     }
     else if (eAct == MM::BeforeGet)
     {
-        pProp->Set((long)binning_);
+        // the user is requesting the current value for the property, so
+        // either ask the 'hardware' or let the system return the value
+        // cached in the property.
+        //pProp->Set((long)binning_);
     }
 
     return DEVICE_OK;
@@ -813,7 +801,8 @@ int SaperaGigE::OnExposure(MM::PropertyBase* pProp, MM::ActionType eAct)
 */
 int SaperaGigE::ResizeImageBuffer()
 {
-    img_.Resize(IMAGE_WIDTH / binning_, IMAGE_HEIGHT / binning_, bytesPerPixel_);
+    int binning = GetBinning();
+    img_.Resize(IMAGE_WIDTH / binning, IMAGE_HEIGHT / binning, bytesPerPixel_);
 
     return DEVICE_OK;
 }
@@ -860,6 +849,58 @@ int SaperaGigE::SapBufferReformat(SapFormat format, const char* acqFormat)
         return DEVICE_NATIVE_MODULE_FAILED;
     }
     return DEVICE_OK;
+}
+
+int SaperaGigE::SetUpBinningProperties()
+{
+    // note that the GenICam spec separates vertical and horizontal binning and does
+    // not provide a single, unified binning property.
+    CPropertyAction* pAct = new CPropertyAction(this, &SaperaGigE::OnBinning);
+    int ret = CreateProperty(MM::g_Keyword_Binning, "1", MM::Integer, false, pAct);
+    if (DEVICE_OK != ret)
+        return ret;
+
+    if (!AcqDevice_.SetFeatureValue("BinningVertical", 1))
+        return DEVICE_ERR;
+    if (!AcqDevice_.SetFeatureValue("BinningHorizontal", 1))
+        return DEVICE_ERR;
+
+    int64_t bin, min, max, inc;
+    std::vector<std::string> vValues, hValues, binValues;
+
+    // vertical binning
+    AcqDevice_.GetFeatureValue("BinningVertical", &bin);
+    AcqDevice_.GetFeatureInfo("BinningVertical", &feature_);
+    feature_.GetMin(&min);
+    feature_.GetMax(&max);
+    feature_.GetInc(&inc);
+    for (int64_t i = min; i <= max; i += inc)
+        vValues.push_back(std::to_string(i));
+
+    // horizontal binning
+    AcqDevice_.GetFeatureValue("BinningHorizontal", &bin);
+    AcqDevice_.GetFeatureInfo("BinningHorizontal", &feature_);
+    feature_.GetMin(&min);
+    feature_.GetMax(&max);
+    feature_.GetInc(&inc);
+    for (int64_t i = min; i <= max; i += inc)
+        hValues.push_back(std::to_string(i));
+
+    // possible uniform binning values.
+    if (vValues.empty() && hValues.empty())
+        binValues.push_back("1");
+    else if (vValues.empty())
+        binValues = hValues;
+    else if (hValues.empty())
+        binValues = vValues;
+    else {
+        binValues.reserve(vValues.size() + hValues.size());
+        std::set_union(vValues.begin(), vValues.end(),
+            hValues.begin(), hValues.end(),
+            std::back_inserter(binValues));
+    }
+
+    return SetAllowedValues(MM::g_Keyword_Binning, binValues);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
