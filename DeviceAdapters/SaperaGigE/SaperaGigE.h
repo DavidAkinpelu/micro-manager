@@ -59,13 +59,15 @@ const std::map< std::string, std::string > deviceInfoFeaturesStr = {
     {"SensorBlackLevel", "BlackLevel"},
     {"SensorPixelInput", "pixelSizeInput"},
     {"SensorShutterMode", "SensorShutterMode"},
-    {"SensorBinningMode", "BinningMode"}
+    {"SensorBinningMode", "binningMode"}
 };
 
 const std::map< std::string, std::string > deviceInfoFeaturesInt = {
     {"SensorWidth", "SensorWidth"},
     {"SensorHeight", "SensorHeight"},
     {"Sensor Pixel Size", "PixelSize"},
+    //{"Horizontal Offset", "OffsetX"},
+    //{"Vertical Offset", "OffsetY"},
 };
 
 const char* g_CameraServerNameProperty = "AcquisitionDevice";
@@ -109,6 +111,10 @@ public:
     // action interface
     // ----------------
     int OnBinning(MM::PropertyBase* pProp, MM::ActionType eAct);
+    int OnWidth(MM::PropertyBase* pProp, MM::ActionType eAct);
+    int OnHeight(MM::PropertyBase* pProp, MM::ActionType eAct);
+    int OnOffsetX(MM::PropertyBase* pProp, MM::ActionType eAct);
+    int OnOffsetY(MM::PropertyBase* pProp, MM::ActionType eAct);
     int OnTemperature(MM::PropertyBase* pProp, MM::ActionType eAct);
     int OnPixelType(MM::PropertyBase* pProp, MM::ActionType eAct);
     int OnGain(MM::PropertyBase* pProp, MM::ActionType eAct);
@@ -116,15 +122,13 @@ public:
 
 private:
     friend class SequenceThread;
-    static const int IMAGE_WIDTH = 1920;
-    static const int IMAGE_HEIGHT = 1200;
     static const int MAX_BIT_DEPTH = 12;
 
+    ImgBuffer img_;
     SequenceThread* thd_;
     int bytesPerPixel_;
     int bitsPerPixel_;
     bool initialized_;
-    ImgBuffer img_;
     int roiX_, roiY_;
     bool sequenceRunning_;
 

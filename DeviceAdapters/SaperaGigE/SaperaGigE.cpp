@@ -308,9 +308,36 @@ int SaperaGigE::Initialize()
     if (!AcqDevice_.SetFeatureValue("ExposureTime", 1000.0)) // us
         return DEVICE_ERR;
     AcqDevice_.GetFeatureInfo("ExposureTime", &feature_);
-    feature_.GetMax(&high); // us
     feature_.GetMin(&low); // us
+    feature_.GetMax(&high); // us
     SetPropertyLimits(MM::g_Keyword_Exposure, low / 1000., high / 1000.);
+
+    //{"Width", "Width"},
+
+    int64_t min, max, value;
+
+    pAct = new CPropertyAction(this, &SaperaGigE::OnOffsetX);
+    ret = CreateProperty("ROIhorizontalOffset", "1.0", MM::Integer, false, pAct);
+    assert(ret == DEVICE_OK);
+
+    pAct = new CPropertyAction(this, &SaperaGigE::OnOffsetY);
+    ret = CreateProperty("ROIverticalOffset", "1.0", MM::Integer, false, pAct);
+    assert(ret == DEVICE_OK);
+
+    pAct = new CPropertyAction(this, &SaperaGigE::OnWidth);
+    ret = CreateProperty("ROIwidth", "1.0", MM::Integer, true, pAct);
+    assert(ret == DEVICE_OK);
+
+    pAct = new CPropertyAction(this, &SaperaGigE::OnHeight);
+    ret = CreateProperty("ROIheight", "1.0", MM::Integer, true, pAct);
+    assert(ret == DEVICE_OK);
+    //AcqDevice_.GetFeatureInfo("Height", &feature_);
+    //feature_.GetMin(&min);
+    //feature_.GetMax(&max);
+    //SetPropertyLimits("Height", min, max);
+    //AcqDevice_.GetFeatureValue("SensorHeight", &value);
+    ////if (!AcqDevice_.SetFeatureValue("Height", 1200))
+    ////    return DEVICE_ERR;
 
     // Set up temperature
     pAct = new CPropertyAction(this, &SaperaGigE::OnTemperature);
@@ -457,7 +484,7 @@ unsigned SaperaGigE::GetBitDepth() const
 */
 long SaperaGigE::GetImageBufferSize() const
 {
-    return img_.Width() * img_.Height() * GetImageBytesPerPixel();
+    return img_.Width() * img_.Height() * img_.Depth();
 }
 
 /**
@@ -660,25 +687,92 @@ int SaperaGigE::OnBinning(MM::PropertyBase* pProp, MM::ActionType eAct)
         // cached in the property.
         //pProp->Set((long)binning_);
     }
+    return DEVICE_OK;
+}
 
+int SaperaGigE::OnOffsetX(MM::PropertyBase* pProp, MM::ActionType eAct)
+{
+    if (eAct == MM::AfterSet)
+    {
+        long value;
+        pProp->Get(value);
+        if (!AcqDevice_.SetFeatureValue("OffsetX", int(value)))
+            return DEVICE_ERR;
+    }
+    else if (eAct == MM::BeforeGet)
+    {
+        UINT32 value;
+        if (!AcqDevice_.GetFeatureValue("OffsetX", &value))
+            return DEVICE_ERR;
+        pProp->Set((long)value);
+    }
+    return DEVICE_OK;
+}
+
+int SaperaGigE::OnOffsetY(MM::PropertyBase* pProp, MM::ActionType eAct)
+{
+    if (eAct == MM::AfterSet)
+    {
+        long value;
+        pProp->Get(value);
+        if (!AcqDevice_.SetFeatureValue("OffsetY", int(value)))
+            return DEVICE_ERR;
+    }
+    else if (eAct == MM::BeforeGet)
+    {
+        UINT32 value;
+        if (!AcqDevice_.GetFeatureValue("OffsetY", &value))
+            return DEVICE_ERR;
+        pProp->Set((long)value);
+    }
+    return DEVICE_OK;
+}
+
+int SaperaGigE::OnWidth(MM::PropertyBase* pProp, MM::ActionType eAct)
+{
+    if (eAct == MM::AfterSet)
+    {
+        return DEVICE_CAN_NOT_SET_PROPERTY;
+    }
+    else if (eAct == MM::BeforeGet)
+    {
+        UINT32 value;
+        if (!AcqDevice_.GetFeatureValue("Width", &value))
+            return DEVICE_ERR;
+        pProp->Set((long)value);
+    }
+    return DEVICE_OK;
+}
+
+int SaperaGigE::OnHeight(MM::PropertyBase* pProp, MM::ActionType eAct)
+{
+    if (eAct == MM::AfterSet)
+    {
+        return DEVICE_CAN_NOT_SET_PROPERTY;
+    }
+    else if (eAct == MM::BeforeGet)
+    {
+        UINT32 value;
+        if (!AcqDevice_.GetFeatureValue("Height", &value))
+            return DEVICE_ERR;
+        pProp->Set((long)value);
+    }
     return DEVICE_OK;
 }
 
 int SaperaGigE::OnTemperature(MM::PropertyBase* pProp, MM::ActionType eAct)
 {
-    if (eAct == MM::BeforeGet)
+    if (eAct == MM::AfterSet)
+    {
+        return DEVICE_CAN_NOT_SET_PROPERTY;
+    }
+    else if (eAct == MM::BeforeGet)
     {
         double temperature;
         if (!AcqDevice_.GetFeatureValue("DeviceTemperature", &temperature))
             return DEVICE_ERR;
         pProp->Set(temperature);
-        return DEVICE_OK;
     }
-    else if (eAct == MM::AfterSet)
-    {
-        return DEVICE_CAN_NOT_SET_PROPERTY;
-    }
-
     return DEVICE_OK;
 }
 
@@ -794,8 +888,14 @@ int SaperaGigE::OnExposure(MM::PropertyBase* pProp, MM::ActionType eAct)
 */
 int SaperaGigE::ResizeImageBuffer()
 {
-    int binning = GetBinning();
-    img_.Resize(IMAGE_WIDTH / binning, IMAGE_HEIGHT / binning, bytesPerPixel_);
+    UINT32 width, height;
+    if (!AcqDevice_.GetFeatureValue("Height", &height))
+        return DEVICE_INVALID_PROPERTY;
+    if (!AcqDevice_.GetFeatureValue("Width", &width))
+        return DEVICE_INVALID_PROPERTY;
+
+    //width = Buffers_.GetWidth();
+    img_.Resize(width, height, bytesPerPixel_);
 
     return DEVICE_OK;
 }
@@ -810,7 +910,7 @@ void SaperaGigE::GenerateImage()
     double step = maxValue / maxExp;
     unsigned char* pBuf = const_cast<unsigned char*>(img_.GetPixels());
     double exposureMs = GetExposure();
-    memset(pBuf, (int)(step * max(exposureMs, maxExp)), img_.Height() * img_.Width() * img_.Depth());
+    memset(pBuf, (int)(step * max(exposureMs, maxExp)), GetImageBufferSize());
 }
 
 /*
@@ -827,7 +927,6 @@ int SaperaGigE::SapBufferReformat(SapFormat format, const char* acqFormat)
     Xfer_ = &AcqDeviceToBuf_;
     if (!Buffers_.Create())
     {
-        //SapManager::DisplayMessage("Failed to recreate Buffer - SapBufferReformat");
         int ret = FreeHandles();
         if (ret != DEVICE_OK)
             return ret;
@@ -835,7 +934,6 @@ int SaperaGigE::SapBufferReformat(SapFormat format, const char* acqFormat)
     }
     if (Xfer_ && !Xfer_->Create())
     {
-        //SapManager::DisplayMessage("Xfer_ recreation failed - SapBufferReformat");
         int ret = FreeHandles();
         if (ret != DEVICE_OK)
             return ret;
