@@ -53,10 +53,9 @@ const std::map< std::string, std::string > deviceInfoFeaturesStr = {
     {"Serial Number", "DeviceSerialNumber"},
     {"Device User ID", "DeviceUserID"},
     {"MAC Address", "deviceMacAddress"},
-    {"Sensor Type", "sensorColorType"},
-    {"Sensor Pixel Format", "PixelFormat"},
-    {"Sensor Pixel Coding", "PixelCoding"},
-    {"SensorBlackLevel", "BlackLevel"},
+    {"SensorType", "sensorColorType"},
+    {"SensorPixelCoding", "PixelCoding"},
+    //{"SensorBlackLevel", "BlackLevel"},
     {"SensorPixelInput", "pixelSizeInput"},
     {"SensorShutterMode", "SensorShutterMode"},
     {"SensorBinningMode", "binningMode"}
@@ -65,9 +64,20 @@ const std::map< std::string, std::string > deviceInfoFeaturesStr = {
 const std::map< std::string, std::string > deviceInfoFeaturesInt = {
     {"SensorWidth", "SensorWidth"},
     {"SensorHeight", "SensorHeight"},
-    {"Sensor Pixel Size", "PixelSize"},
+    //{"Sensor Pixel Size", "PixelSize"},
     //{"Horizontal Offset", "OffsetX"},
     //{"Vertical Offset", "OffsetY"},
+};
+
+//const std::map< std::string, SapFormat > pixelFormat = {
+//    {"Mono8", SapFormatMono8},
+//    {"Mono10", SapFormatMono10}
+//};
+
+const std::map< std::string, int > pixelBit = {
+    {"8bit", 8},
+    {"10bit", 10},
+    {"12bit", 12}
 };
 
 const char* g_CameraServerNameProperty = "AcquisitionDevice";
@@ -111,10 +121,12 @@ public:
     // action interface
     // ----------------
     int OnBinning(MM::PropertyBase* pProp, MM::ActionType eAct);
-    int OnWidth(MM::PropertyBase* pProp, MM::ActionType eAct);
-    int OnHeight(MM::PropertyBase* pProp, MM::ActionType eAct);
+    int OnPixelSize(MM::PropertyBase* pProp, MM::ActionType eAct);
+    int OnBlackLevel (MM::PropertyBase* pProp, MM::ActionType eAct);
     int OnOffsetX(MM::PropertyBase* pProp, MM::ActionType eAct);
     int OnOffsetY(MM::PropertyBase* pProp, MM::ActionType eAct);
+    int OnWidth(MM::PropertyBase* pProp, MM::ActionType eAct);
+    int OnHeight(MM::PropertyBase* pProp, MM::ActionType eAct);
     int OnTemperature(MM::PropertyBase* pProp, MM::ActionType eAct);
     int OnPixelType(MM::PropertyBase* pProp, MM::ActionType eAct);
     int OnGain(MM::PropertyBase* pProp, MM::ActionType eAct);
@@ -129,7 +141,6 @@ private:
     int bytesPerPixel_;
     int bitsPerPixel_;
     bool initialized_;
-    int roiX_, roiY_;
     bool sequenceRunning_;
 
     int ResizeImageBuffer();
@@ -138,21 +149,22 @@ private:
 
     std::vector<std::string> acqDeviceList_;
     std::string activeDevice_;
-    //SapAcquisition Acq_;
+
     SapAcqDevice AcqDevice_;
     SapBufferWithTrash Buffers_;
+    SapBufferRoi Roi_;
     SapTransfer AcqToBuf_;
     SapTransfer AcqDeviceToBuf_;
     SapTransfer* Xfer_;
     SapLocation loc_;
     SapFeature feature_;
-    int SapFormatBytes_;
+    //int SapFormatBytes_;
 
     int FreeHandles();
     int ErrorBox(std::string text, std::string caption);
     int SetUpBinningProperties();
     LPCWSTR SaperaGigE::string2winstring(const std::string& s);
-    int SapBufferReformat(SapFormat format, const char* acqFormat);
+    int SapBufferReformat(std::string pixelFormat="");
 };
 
 //threading stuff.  Tread lightly
