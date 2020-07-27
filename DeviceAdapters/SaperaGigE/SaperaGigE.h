@@ -1,14 +1,14 @@
-///////////////////////////////////////////////////////////////////////////////
-// FILE:          SaperaGigE.h
+/////////////////////////////////////////////////////////
+// FILE:		SaperaGigE.h
 // PROJECT:       Micro-Manager
 // SUBSYSTEM:     DeviceAdapters
-//-----------------------------------------------------------------------------
-// DESCRIPTION:   Skeleton code for the micro-manager camera adapter. Use it as
-//                starting point for writing custom device adapters
+//-------------------------------------------------------
+// DESCRIPTION:   An adapter for Gigbit-Ethernet cameras using an
+//                SDK from JAI, Inc.  Users and developers will
+//                need to download and install the JAI SDK and control tool.
 //
-// AUTHOR:        Nenad Amodaj, http://nenad.amodaj.com
-//
-// COPYRIGHT:     University of California, San Francisco, 2011
+// AUTHOR:        Robert Frazee, rfraze1@lsu.edu
+//                Ingmar Schoegl, ischoegl@lsu.edu
 //
 // LICENSE:       This file is distributed under the BSD license.
 //                License text is included with the source distribution.
@@ -20,7 +20,6 @@
 //                IN NO EVENT SHALL THE COPYRIGHT OWNER OR
 //                CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
 //                INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES.
-//
 
 #ifndef _SaperaGigE_H_
 #define _SaperaGigE_H_
@@ -43,10 +42,8 @@
 
 class SequenceThread;
 
-const char* g_CameraName = "SaperaGigE";
+const char* g_CameraDeviceName = "Sapera GigE camera adapter";
 const char* g_CameraServer = "AcquisitionDevice";
-const char* g_ShutterMode = "ShutterMode";
-const char* g_BinningMode = "binningMode";
 
 std::map< SapFeature::Type, MM::PropertyType > featureType = {
     {SapFeature::TypeString, MM::String},
@@ -57,30 +54,35 @@ std::map< SapFeature::Type, MM::PropertyType > featureType = {
     {SapFeature::TypeUndefined, MM::String}
 };
 
+std::wstring s2ws(const std::string&);
+int ErrorBox(std::string text, std::string caption);
+
 class SaperaGigE : public CCameraBase<SaperaGigE>
 {
 private:
-    struct myFeature
+    struct feature
     {
         char* name;
         bool readOnly;
         CPropertyAction* action;
     };
 
-    const std::map< const char*, myFeature > deviceFeatures = {
+    const std::map< const char*, feature > deviceFeatures = {
         // information on device - use names shown in Sapera CamExpert
         {MM::g_Keyword_PixelType, {"PixelFormat", false, new CPropertyAction(this, &SaperaGigE::OnPixelType)}},
-        {"Manufacturer Name", {"DeviceVendorName", true, NULL}},
-        {"Family Name", {"DeviceFamilyName", true, NULL}},
-        {"Model Name", {"DeviceModelName", true, NULL}},
-        {"Device Version", {"DeviceVersion", true, NULL}},
-        {"Manufacturer Info", {"DeviceManufacturerInfo", true, NULL}},
-        {"Manufacturer Part Number", {"deviceManufacturerPartNumber", true, NULL}},
-        {"Firmware Version", {"DeviceFirmwareVersion", true, NULL}},
-        {"Serial Number", {"DeviceSerialNumber", true, NULL}},
-        {"Device User ID", {"DeviceUserID", true, NULL}},
-        {"MAC Address", {"deviceMacAddress", true, NULL}},
-        {"SensorType", {"sensorColorType", true, NULL}},
+        {MM::g_Keyword_Exposure, {"ExposureTime", false, new CPropertyAction(this, &SaperaGigE::OnExposure)}},
+        {MM::g_Keyword_Gain, {"Gain", false, new CPropertyAction(this, &SaperaGigE::OnGain)}},
+        {"CameraVendor", {"DeviceVendorName", true, NULL}},
+        {"CameraFamily", {"DeviceFamilyName", true, NULL}},
+        {MM::g_Keyword_CameraName, {"DeviceModelName", true, NULL}},
+        {"CameraVersion", {"DeviceVersion", true, NULL}},
+        {"CameraInfo", {"DeviceManufacturerInfo", true, NULL}},
+        {"CameraPartNumber", {"deviceManufacturerPartNumber", true, NULL}},
+        {"CameraFirmwareVersion", {"DeviceFirmwareVersion", true, NULL}},
+        {"CameraSerialNumber", {"DeviceSerialNumber", true, NULL}},
+        {MM::g_Keyword_CameraID, {"DeviceUserID", true, NULL}},
+        {"CameraMacAddress", {"deviceMacAddress", true, NULL}},
+        {"SensorColorType", {"sensorColorType", true, NULL}},
         {"SensorPixelCoding", {"PixelCoding", true, NULL}},
         {"SensorBlackLevel", {"BlackLevel", true, NULL}},
         {"SensorPixelInput", {"pixelSizeInput", true, NULL}},
@@ -93,7 +95,9 @@ private:
         {"ImageVerticalOffset", {"OffsetY", false, new CPropertyAction(this, &SaperaGigE::OnOffsetY)}},
         {"ImageWidth", {"Width", false, new CPropertyAction(this, &SaperaGigE::OnWidth)}},
         {"ImageHeight", {"Height", false, new CPropertyAction(this, &SaperaGigE::OnHeight)}},
-        {"DeviceTemperature", {"DeviceTemperature", true, new CPropertyAction(this, &SaperaGigE::OnTemperature)}},
+        {"SensorTemperature", {"DeviceTemperature", true, new CPropertyAction(this, &SaperaGigE::OnTemperature)}},
+        //{"ReverseX", {"ReverseX", true, NULL}},
+        //{MM::g_Keyword_Transpose_MirrorY, {"ReverseY", true, NULL}},
     };
 
 public:
@@ -173,10 +177,9 @@ private:
     SapFeature AcqFeature_;
 
     int FreeHandles();
-    int ErrorBox(std::string text, std::string caption);
     int SetUpBinningProperties();
-    LPCWSTR SaperaGigE::string2winstring(const std::string& s);
     int SynchronizeBuffers(std::string pixelFormat = "", int width = -1, int height = -1);
+    long CheckValue(const char*, long);
 };
 
 //threading stuff.  Tread lightly

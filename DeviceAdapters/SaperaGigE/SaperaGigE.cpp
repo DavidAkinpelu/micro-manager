@@ -1,14 +1,27 @@
 /////////////////////////////////////////////////////////
-// FILE:		SaperaGigE.cpp
-// PROJECT:		Teledyne DALSA Micro-Manager Glue Library
+// FILE:		  SaperaGigE.cpp
+// PROJECT:       Micro-Manager
+// SUBSYSTEM:     DeviceAdapters
 //-------------------------------------------------------
-// AUTHOR: Robert Frazee, rfraze1@lsu.edu
+// DESCRIPTION:   An adapter for Gigbit-Ethernet cameras using an
+//                SDK from JAI, Inc.  Users and developers will
+//                need to download and install the JAI SDK and control tool.
+//
+// AUTHOR:        Robert Frazee, rfraze1@lsu.edu
+//                Ingmar Schoegl, ischoegl@lsu.edu
+//
+// LICENSE:       This file is distributed under the BSD license.
+//                License text is included with the source distribution.
+//
+//                This file is distributed in the hope that it will be useful,
+//                but WITHOUT ANY WARRANTY; without even the implied warranty
+//                of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+//
+//                IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+//                CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+//                INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES.
 
 #include "SaperaGigE.h"
-#include "stdio.h"
-#include "conio.h"
-#include "math.h"
-#include <string>
 
 using namespace std;
 
@@ -21,7 +34,7 @@ using namespace std;
  */
 MODULE_API void InitializeModuleData()
 {
-    RegisterDevice(g_CameraName, MM::CameraDevice, "Sapera GigE Camera Device");
+    RegisterDevice(g_CameraDeviceName, MM::CameraDevice, "Sapera GigE camera device adapter");
 }
 
 MODULE_API MM::Device* CreateDevice(const char* deviceName)
@@ -30,7 +43,7 @@ MODULE_API MM::Device* CreateDevice(const char* deviceName)
         return 0;
 
     // decide which device class to create based on the deviceName parameter
-    if (strcmp(deviceName, g_CameraName) == 0)
+    if (strcmp(deviceName, g_CameraDeviceName) == 0)
     {
         // create camera
         return new SaperaGigE();
@@ -44,6 +57,23 @@ MODULE_API MM::Device* CreateDevice(const char* deviceName)
 MODULE_API void DeleteDevice(MM::Device* pDevice)
 {
     delete pDevice;
+}
+
+std::wstring s2ws(const std::string& s)
+{
+    int len;
+    int slength = (int)s.length() + 1;
+    len = MultiByteToWideChar(CP_ACP, 0, s.c_str(), slength, 0, 0);
+    wchar_t* buf = new wchar_t[len];
+    MultiByteToWideChar(CP_ACP, 0, s.c_str(), slength, buf, len);
+    std::wstring r(buf);
+    delete[] buf;
+    return r;
+}
+
+int ErrorBox(std::string text, std::string caption)
+{
+    return MessageBox(NULL, s2ws(caption).c_str(), s2ws(text).c_str(), (MB_ICONERROR | MB_OK));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -71,23 +101,17 @@ SaperaGigE::SaperaGigE() :
     // call the base class method to set-up default error codes/messages
     InitializeDefaultErrorMessages();
 
-    // Description property
-    int ret = CreateProperty(MM::g_Keyword_Description, "Sapera GigE Camera Adapter", MM::String, true);
-    assert(ret == DEVICE_OK);
+    CreateProperty(MM::g_Keyword_Name, g_CameraDeviceName, MM::String, true);
 
     // Sapera++ library stuff
-    int serverCount = 0;
-    if (SapManager::DetectAllServers(SapManager::DetectServerAll))
-    {
-        serverCount = SapManager::GetServerCount();
-    }
-    else
+    if (!(SapManager::DetectAllServers(SapManager::DetectServerAll)))
     {
         LogMessage("No CameraLink camera servers detected", false);
-        assert(false);
-        //return DEVICE_NATIVE_MODULE_FAILED;
+        activeDevice_ = "";
+        return;
     }
 
+    int serverCount = SapManager::GetServerCount();
     char serverName[CORSERVER_MAX_STRLEN];
     for (int serverIndex = 0; serverIndex < serverCount; serverIndex++)
     {
@@ -101,18 +125,13 @@ SaperaGigE::SaperaGigE() :
 
     if (acqDeviceList_.size() == 0)
     {
-        ErrorBox("Initialization Error", "No servers!");
-        assert(false);
-        //return DEVICE_NATIVE_MODULE_FAILED;
+        activeDevice_ = "";
+        return;
     }
 
-    ret = CreateProperty(g_CameraServer, acqDeviceList_[0].c_str(), MM::String, false, 0, false);
-    assert(ret == DEVICE_OK);
-
-    ret = SetAllowedValues(g_CameraServer, acqDeviceList_);
-    assert(ret == DEVICE_OK);
-
-    // set active device to first server in the list
+    // add available servers to property and set active device to first server in the list
+    CreateProperty(g_CameraServer, acqDeviceList_[0].c_str(), MM::String, false, 0, false);
+    SetAllowedValues(g_CameraServer, acqDeviceList_);
     activeDevice_ = acqDeviceList_[0];
 }
 
@@ -137,7 +156,7 @@ void SaperaGigE::GetName(char* name) const
 {
     // We just return the name we use for referring to this
     // device adapter.
-    CDeviceUtils::CopyLimitedString(name, g_CameraName);
+    CDeviceUtils::CopyLimitedString(name, g_CameraDeviceName);
 }
 
 /**
@@ -150,13 +169,15 @@ int SaperaGigE::Initialize()
 {
     if (initialized_)
         return DEVICE_OK;
+    if (activeDevice_.size() == 0)
+        return DEVICE_NOT_CONNECTED;
 
     int ret;
-    CPropertyAction* pAct;
 
     // create live video thread
     thd_ = new SequenceThread(this);
 
+    LogMessage((std::string) "Initialize device '" + activeDevice_ + "'");
     SapLocation loc_(activeDevice_.c_str());
     AcqDevice_ = SapAcqDevice(loc_, false);
     if (!AcqDevice_.Create())
@@ -191,7 +212,7 @@ int SaperaGigE::Initialize()
     // device features
     for (auto const& x : deviceFeatures)
     {
-        myFeature f = x.second;
+        feature f = x.second;
         BOOL isAvailable;
         AcqDevice_.IsFeatureAvailable(f.name, &isAvailable);
         if (!isAvailable)
@@ -243,22 +264,12 @@ int SaperaGigE::Initialize()
     double high = 0.0;
 
     // Set up gain
-    pAct = new CPropertyAction(this, &SaperaGigE::OnGain);
-    ret = CreateProperty(MM::g_Keyword_Gain, "1.0", MM::Float, false, pAct);
-    assert(ret == DEVICE_OK);
-    if (!AcqDevice_.SetFeatureValue("Gain", 1.0))
-        return DEVICE_ERR;
     AcqDevice_.GetFeatureInfo("Gain", &AcqFeature_);
     AcqFeature_.GetMax(&high);
     AcqFeature_.GetMin(&low);
     SetPropertyLimits(MM::g_Keyword_Gain, low, high);
 
     // Set up exposure
-    pAct = new CPropertyAction(this, &SaperaGigE::OnExposure);
-    ret = CreateProperty(MM::g_Keyword_Exposure, "1.0", MM::Float, false, pAct);
-    assert(ret == DEVICE_OK);
-    if (!AcqDevice_.SetFeatureValue("ExposureTime", 1000.0)) // us
-        return DEVICE_ERR;
     AcqDevice_.GetFeatureInfo("ExposureTime", &AcqFeature_);
     AcqFeature_.GetMin(&low); // us
     AcqFeature_.GetMax(&high); // us
@@ -284,6 +295,8 @@ int SaperaGigE::Shutdown()
 {
     if (!initialized_)
         return DEVICE_OK;
+    LogMessage((std::string) "Shuttind down device '" + loc_.GetServerName() + "'");
+
     initialized_ = false;
     Xfer_->Freeze();
     if (!Xfer_->Wait(5000))
@@ -300,16 +313,12 @@ int SaperaGigE::Shutdown()
 */
 int SaperaGigE::FreeHandles()
 {
+    LogMessage((std::string) "Destroy Sapera buffers and devices");
     if (Xfer_ && *Xfer_ && !Xfer_->Destroy()) return DEVICE_ERR;
     if (!Buffers_.Destroy()) return DEVICE_ERR;
     if (!AcqFeature_.Destroy()) return DEVICE_ERR;
     if (!AcqDevice_.Destroy()) return DEVICE_ERR;
     return DEVICE_OK;
-}
-
-int SaperaGigE::ErrorBox(std::string text, std::string caption)
-{
-    return MessageBox(NULL, (LPCWSTR)caption.c_str(), (LPCWSTR)text.c_str(), (MB_ICONERROR | MB_OK));
 }
 
 /**
@@ -418,9 +427,7 @@ long SaperaGigE::GetImageBufferSize() const
 int SaperaGigE::SetROI(unsigned x, unsigned y, unsigned xSize, unsigned ySize)
 {
     if (xSize == 0 && ySize == 0)
-    {
         return ClearROI();
-    }
     else
     {
         // apply ROI
@@ -619,6 +626,23 @@ int SaperaGigE::OnPixelSize(MM::PropertyBase* pProp, MM::ActionType eAct)
     return DEVICE_OK;
 }
 
+long SaperaGigE::CheckValue(const char* key, long value)
+{
+    int64_t min, max, inc;
+    AcqDevice_.GetFeatureInfo(key, &AcqFeature_);
+    AcqFeature_.GetInc(&inc);
+    AcqFeature_.GetMin(&min);
+    AcqFeature_.GetMax(&max);
+
+    long out = (value / (long)inc) * (long)inc;
+    out = max((long)min, min((long)max, out));
+
+    if (value != out)
+        LogMessage((std::string) "Encountered invalid value for '" + key
+            + "': corrected " + std::to_string(value) + " to " + std::to_string(out));
+    return out;
+}
+
 int SaperaGigE::OnOffsetX(MM::PropertyBase* pProp, MM::ActionType eAct)
 {
     if (eAct == MM::AfterSet)
@@ -626,15 +650,8 @@ int SaperaGigE::OnOffsetX(MM::PropertyBase* pProp, MM::ActionType eAct)
         long value;
         pProp->Get(value);
 
-        int64_t min, max, inc;
-        AcqDevice_.GetFeatureInfo("OffsetX", &AcqFeature_);
-        AcqFeature_.GetInc(&inc);
-        AcqFeature_.GetMin(&min);
-        AcqFeature_.GetMax(&max);
-        value = (value / (long)inc) * (long)inc;
-        value = max(min, min(max, value));
-
-        if (!AcqDevice_.SetFeatureValue("OffsetX", int(value)))
+        value = CheckValue("OffsetX", value);
+        if (!AcqDevice_.SetFeatureValue("OffsetX", value))
             return DEVICE_ERR;
     }
     else if (eAct == MM::BeforeGet)
@@ -654,15 +671,8 @@ int SaperaGigE::OnOffsetY(MM::PropertyBase* pProp, MM::ActionType eAct)
         long value;
         pProp->Get(value);
 
-        int64_t min, max, inc;
-        AcqDevice_.GetFeatureInfo("OffsetY", &AcqFeature_);
-        AcqFeature_.GetInc(&inc);
-        AcqFeature_.GetMin(&min);
-        AcqFeature_.GetMax(&max);
-        value = (value / inc) * inc;
-        value = max(min, min(max, value));
-
-        if (!AcqDevice_.SetFeatureValue("OffsetY", int(value)))
+        value = CheckValue("OffsetY", value);
+        if (!AcqDevice_.SetFeatureValue("OffsetY", value))
             return DEVICE_ERR;
     }
     else if (eAct == MM::BeforeGet)
@@ -682,14 +692,7 @@ int SaperaGigE::OnWidth(MM::PropertyBase* pProp, MM::ActionType eAct)
         long value;
         pProp->Get(value);
 
-        int64_t min, max, inc;
-        AcqDevice_.GetFeatureInfo("Width", &AcqFeature_);
-        AcqFeature_.GetInc(&inc);
-        AcqFeature_.GetMin(&min);
-        AcqFeature_.GetMax(&max);
-        value = (value / inc) * inc;
-        value = max(min, min(max, value));
-
+        value = CheckValue("Width", value);
         int ret = SynchronizeBuffers("", value, -1);
         if (ret != DEVICE_OK)
             return ret;
@@ -711,14 +714,7 @@ int SaperaGigE::OnHeight(MM::PropertyBase* pProp, MM::ActionType eAct)
         long value;
         pProp->Get(value);
 
-        int64_t min, max, inc;
-        AcqDevice_.GetFeatureInfo("Height", &AcqFeature_);
-        AcqFeature_.GetInc(&inc);
-        AcqFeature_.GetMin(&min);
-        AcqFeature_.GetMax(&max);
-        value = (value / inc) * inc;
-        value = max(min, min(max, value));
-
+        value = CheckValue("Height", value);
         int ret = SynchronizeBuffers("", -1, value);
         if (ret != DEVICE_OK)
             return ret;
@@ -906,6 +902,7 @@ int SaperaGigE::SetUpBinningProperties()
 {
     // note that the GenICam spec separates vertical and horizontal binning and does
     // not provide a single, unified binning property.
+    LogMessage((std::string) "Set up binning properties");
     CPropertyAction* pAct = new CPropertyAction(this, &SaperaGigE::OnBinning);
     int ret = CreateProperty(MM::g_Keyword_Binning, "1", MM::Integer, false, pAct);
     if (DEVICE_OK != ret)
