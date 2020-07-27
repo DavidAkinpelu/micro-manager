@@ -95,6 +95,8 @@ private:
         {"ImageVerticalOffset", {"OffsetY", false, new CPropertyAction(this, &SaperaGigE::OnOffsetY)}},
         {"ImageWidth", {"Width", false, new CPropertyAction(this, &SaperaGigE::OnWidth)}},
         {"ImageHeight", {"Height", false, new CPropertyAction(this, &SaperaGigE::OnHeight)}},
+        {"ImageTimeout", {"ImageTimeout", false, new CPropertyAction(this, &SaperaGigE::OnImageTimeout)}},
+        {"TurboTransferEnable", {"turboTransferEnable", true, NULL}},
         {"SensorTemperature", {"DeviceTemperature", true, new CPropertyAction(this, &SaperaGigE::OnTemperature)}},
         //{"ReverseX", {"ReverseX", true, NULL}},
         //{MM::g_Keyword_Transpose_MirrorY, {"ReverseY", true, NULL}},
@@ -122,14 +124,24 @@ public:
     long GetImageBufferSize() const;
     double GetExposure() const;
     void SetExposure(double exp);
+
+    // ROI-related functions
     int SetROI(unsigned x, unsigned y, unsigned xSize, unsigned ySize);
     int GetROI(unsigned& x, unsigned& y, unsigned& xSize, unsigned& ySize);
     int ClearROI();
-    int PrepareSequenceAcqusition();
-    int StartSequenceAcquisition(double interval);
+
+    // sequence-acquisition-related functions
+    int PrepareSequenceAcqusition() { return DEVICE_OK; }
+    //int StartSequenceAcquisition(double interval);
     int StartSequenceAcquisition(long numImages, double interval_ms, bool stopOnOverflow);
     int StopSequenceAcquisition();
     bool IsCapturing();
+
+    // pixel-size-related functions
+    // the GenICam spec and the JAI sdk have no way to query sensor pixel size.
+    double GetNominalPixelSizeUm() const { return 1.0; }
+    double GetPixelSizeUm() const { return 1.0 * GetBinning(); }
+
     int GetBinning() const;
     int SetBinning(int binSize);
     int IsExposureSequenceable(bool& seq) const { seq = false; return DEVICE_OK; }
@@ -143,6 +155,7 @@ public:
     int OnOffsetY(MM::PropertyBase* pProp, MM::ActionType eAct);
     int OnWidth(MM::PropertyBase* pProp, MM::ActionType eAct);
     int OnHeight(MM::PropertyBase* pProp, MM::ActionType eAct);
+    int OnImageTimeout(MM::PropertyBase* pProp, MM::ActionType eAct);
     int OnTemperature(MM::PropertyBase* pProp, MM::ActionType eAct);
     int OnPixelType(MM::PropertyBase* pProp, MM::ActionType eAct);
     int OnGain(MM::PropertyBase* pProp, MM::ActionType eAct);
@@ -178,8 +191,9 @@ private:
 
     int FreeHandles();
     int SetUpBinningProperties();
-    int SynchronizeBuffers(std::string pixelFormat = "", int width = -1, int height = -1);
+    int SynchronizeBuffers(std::string pixelFormat = "", int width = -1, int height = -1, double timeout = -1.);
     long CheckValue(const char*, long);
+    static void XferCallback(SapXferCallbackInfo*);
 };
 
 //threading stuff.  Tread lightly

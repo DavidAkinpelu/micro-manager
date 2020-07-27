@@ -332,6 +332,7 @@ int SaperaGigE::SnapImage()
     if (sequenceRunning_)
         return DEVICE_CAMERA_BUSY_ACQUIRING;
     // Start image capture
+    Xfer_->SetCommandTimeout(1000);
     if (!Xfer_->Snap(1))
     {
         return DEVICE_ERR;
@@ -506,23 +507,19 @@ int SaperaGigE::SetBinning(int binF)
     return SetProperty(MM::g_Keyword_Binning, CDeviceUtils::ConvertToString(binF));
 }
 
-int SaperaGigE::PrepareSequenceAcqusition()
-{
-    return DEVICE_ERR;
-}
-
-/**
- * Required by the MM::Camera API
- * Please implement this yourself and do not rely on the base class implementation
- * The Base class implementation is deprecated and will be removed shortly
- */
-int SaperaGigE::StartSequenceAcquisition(double interval_ms)
-{
-    //@TODO: Implement Sequence Acquisition
-    return DEVICE_ERR;
-    //int ret = StartSequenceAcquisition((long)(interval_ms/exposureMs_), interval_ms, true);
-    //return ret;
-}
+//i/**
+// * Required by the MM::Camera API
+// * Please implement this yourself and do not rely on the base class implementation
+// * The Base class implementation is deprecated and will be removed shortly
+// */
+////int SaperaGigE::StartSequenceAcquisition(double interval_ms)
+//int SaperaGigE::StartSequenceAcquisition(long numImages, double interval_ms, bool stopOnOverflow);
+//{
+//    //@TODO: Implement Sequence Acquisition
+//    return DEVICE_ERR;
+//    //int ret = StartSequenceAcquisition((long)(interval_ms/exposureMs_), interval_ms, true);
+//    //return ret;
+//}
 
 /**
 * Stop and wait for the Sequence thread finished
@@ -729,6 +726,26 @@ int SaperaGigE::OnHeight(MM::PropertyBase* pProp, MM::ActionType eAct)
     return DEVICE_OK;
 }
 
+int SaperaGigE::OnImageTimeout(MM::PropertyBase* pProp, MM::ActionType eAct)
+{
+    if (eAct == MM::AfterSet)
+    {
+        double value;
+        pProp->Get(value);
+        int ret = SynchronizeBuffers("", -1, -1, value);
+        if (ret != DEVICE_OK)
+            return ret;
+    }
+    else if (eAct == MM::BeforeGet)
+    {
+        double value;
+        if (!AcqDevice_.GetFeatureValue("ImageTimeout", &value))
+            return DEVICE_ERR;
+        pProp->Set(value);
+    }
+    return DEVICE_OK;
+}
+
 int SaperaGigE::OnTemperature(MM::PropertyBase* pProp, MM::ActionType eAct)
 {
     if (eAct == MM::AfterSet)
@@ -737,10 +754,10 @@ int SaperaGigE::OnTemperature(MM::PropertyBase* pProp, MM::ActionType eAct)
     }
     else if (eAct == MM::BeforeGet)
     {
-        double temperature;
-        if (!AcqDevice_.GetFeatureValue("DeviceTemperature", &temperature))
+        double value;
+        if (!AcqDevice_.GetFeatureValue("DeviceTemperature", &value))
             return DEVICE_ERR;
-        pProp->Set(temperature);
+        pProp->Set(value);
     }
     return DEVICE_OK;
 }
@@ -852,7 +869,7 @@ void SaperaGigE::GenerateImage()
 /*
  * Reformat Sapera Buffer Object
  */
-int SaperaGigE::SynchronizeBuffers(std::string pixelFormat, int width, int height)
+int SaperaGigE::SynchronizeBuffers(std::string pixelFormat, int width, int height, double timeout)
 {
     // destroy transfer and buffer
     if (Roi_ != NULL)
@@ -869,15 +886,17 @@ int SaperaGigE::SynchronizeBuffers(std::string pixelFormat, int width, int heigh
         AcqDevice_.SetFeatureValue("Width", width);
     if (height > 0)
         AcqDevice_.SetFeatureValue("Height", height);
+    if (timeout > 0)
+        AcqDevice_.SetFeatureValue("ImageTimeout", timeout);
 
     // synchronize bit depth with camera
     AcqDevice_.GetFeatureValue("PixelSize", &bitsPerPixel_);
     bytesPerPixel_ = (bitsPerPixel_ + 7) / 8;
 
     // re-create  transfer and buffer
-    Buffers_ = SapBufferWithTrash(2, &AcqDevice_);
+    Buffers_ = SapBufferWithTrash(3, &AcqDevice_);
     Roi_ = new SapBufferRoi(&Buffers_);
-    AcqDeviceToBuf_ = SapAcqDeviceToBuf(&AcqDevice_, &Buffers_);
+    AcqDeviceToBuf_ = SapAcqDeviceToBuf(&AcqDevice_, &Buffers_, XferCallback, this);
     Xfer_ = &AcqDeviceToBuf_;
     if (!Buffers_.Create())
     {
@@ -897,6 +916,17 @@ int SaperaGigE::SynchronizeBuffers(std::string pixelFormat, int width, int heigh
 
     return DEVICE_OK;
 }
+
+void SaperaGigE::XferCallback(SapXferCallbackInfo* pInfo)
+{
+    // If grabbing in trash buffer, log a message
+    if (pInfo->IsTrash())
+    {
+        ErrorBox((std::string) "Frames acquired in trash buffer: " 
+            + std::to_string(pInfo->GetEventCount()), "Xfer");
+    }
+}
+
 
 int SaperaGigE::SetUpBinningProperties()
 {
