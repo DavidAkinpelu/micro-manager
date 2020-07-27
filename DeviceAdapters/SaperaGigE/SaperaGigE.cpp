@@ -5,12 +5,10 @@
 // AUTHOR: Robert Frazee, rfraze1@lsu.edu
 
 #include "SaperaGigE.h"
-#include "../MMDevice/ModuleInterface.h"
 #include "stdio.h"
 #include "conio.h"
 #include "math.h"
 #include <string>
-#include <functional>
 
 using namespace std;
 
@@ -168,8 +166,8 @@ int SaperaGigE::Initialize()
             return ret;
         return DEVICE_INVALID_INPUT_PARAM;
     }
-    feature_ = SapFeature(loc_);
-    if (!feature_.Create())
+    AcqFeature_ = SapFeature(loc_);
+    if (!AcqFeature_.Create())
     {
         ret = FreeHandles();
         if (ret != DEVICE_OK)
@@ -190,38 +188,55 @@ int SaperaGigE::Initialize()
     // set property list
     // -----------------
 
-    // PixelType - load formats from camera
-    vector<string> availableFormats;
-    char pixelFormat[256];
-    AcqDevice_.GetFeatureValue("PixelFormat", pixelFormat, sizeof(pixelFormat));
-    pAct = new CPropertyAction(this, &SaperaGigE::OnPixelType);
-    ret = CreateProperty(MM::g_Keyword_PixelType, pixelFormat, MM::String, false, pAct);
-    assert(ret == DEVICE_OK);
-    AcqDevice_.GetFeatureInfo("PixelFormat", &feature_);
-    int numFormats;
-    feature_.GetEnumCount(&numFormats);
-    for (int i = 0; i < numFormats; i++)
+    // device features
+    for (auto const& x : deviceFeatures)
     {
-        feature_.GetEnumString(i, pixelFormat, sizeof(pixelFormat));
-        availableFormats.push_back(pixelFormat);
-    }
-    ret = SetAllowedValues(MM::g_Keyword_PixelType, availableFormats);
-    assert(ret == DEVICE_OK);
-
-    // Device information
-    for (auto const& x : deviceInfoFeaturesStr)
-    {
+        myFeature f = x.second;
         BOOL isAvailable;
-        AcqDevice_.IsFeatureAvailable(x.second.c_str(), &isAvailable);
+        AcqDevice_.IsFeatureAvailable(f.name, &isAvailable);
         if (!isAvailable)
+        {
+            LogMessage((std::string) "Feature '" + f.name
+                + "' is not supported");
             continue;
+        }
+
+        LogMessage((std::string) "Adding feature '" + f.name
+            + "' as property '" + x.first + "'");
         char value[MM::MaxStrLength];
-        if (!AcqDevice_.GetFeatureValue(x.second.c_str(), value, sizeof(value)))
+        if (!AcqDevice_.GetFeatureValue(f.name, value, sizeof(value)))
             return DEVICE_ERR;
 
-        string s = value;
-        ret = CreateProperty(x.first.c_str(), s.c_str(), MM::String, true);
+        AcqDevice_.GetFeatureInfo(f.name, &AcqFeature_);
+        SapFeature::Type sapType;
+        AcqFeature_.GetType(&sapType);
+        std::map< SapFeature::Type, MM::PropertyType>::iterator it;
+        it = featureType.find(sapType);
+        MM::PropertyType eType;
+        if (it == featureType.end())
+            eType = MM::String;
+        else
+            eType = it->second;
+
+        if (f.action == NULL)
+            ret = CreateProperty(x.first, value, eType, f.readOnly);
+        else
+            ret = CreateProperty(x.first, value, eType, f.readOnly, f.action);
         assert(ret == DEVICE_OK);
+
+        if (sapType == SapFeature::TypeEnum)
+        {
+            vector<string> allowed;
+            int count;
+            AcqFeature_.GetEnumCount(&count);
+            for (int i = 0; i < count; i++)
+            {
+                AcqFeature_.GetEnumString(i, value, sizeof(value));
+                allowed.push_back(value);
+            }
+            ret = SetAllowedValues(x.first, allowed);
+            assert(ret == DEVICE_OK);
+        }
     }
 
     double low = 0.0;
@@ -233,9 +248,9 @@ int SaperaGigE::Initialize()
     assert(ret == DEVICE_OK);
     if (!AcqDevice_.SetFeatureValue("Gain", 1.0))
         return DEVICE_ERR;
-    AcqDevice_.GetFeatureInfo("Gain", &feature_);
-    feature_.GetMax(&high);
-    feature_.GetMin(&low);
+    AcqDevice_.GetFeatureInfo("Gain", &AcqFeature_);
+    AcqFeature_.GetMax(&high);
+    AcqFeature_.GetMin(&low);
     SetPropertyLimits(MM::g_Keyword_Gain, low, high);
 
     // Set up exposure
@@ -244,35 +259,10 @@ int SaperaGigE::Initialize()
     assert(ret == DEVICE_OK);
     if (!AcqDevice_.SetFeatureValue("ExposureTime", 1000.0)) // us
         return DEVICE_ERR;
-    AcqDevice_.GetFeatureInfo("ExposureTime", &feature_);
-    feature_.GetMin(&low); // us
-    feature_.GetMax(&high); // us
+    AcqDevice_.GetFeatureInfo("ExposureTime", &AcqFeature_);
+    AcqFeature_.GetMin(&low); // us
+    AcqFeature_.GetMax(&high); // us
     SetPropertyLimits(MM::g_Keyword_Exposure, low / 1000., high / 1000.);
-
-    pAct = new CPropertyAction(this, &SaperaGigE::OnPixelSize);
-    ret = CreateProperty("ImagePixelSize", "1", MM::Integer, true, pAct);
-    assert(ret == DEVICE_OK);
-
-    pAct = new CPropertyAction(this, &SaperaGigE::OnOffsetX);
-    ret = CreateProperty("ImageHorizontalOffset", "1", MM::Integer, false, pAct);
-    assert(ret == DEVICE_OK);
-
-    pAct = new CPropertyAction(this, &SaperaGigE::OnOffsetY);
-    ret = CreateProperty("ImageVerticalOffset", "1", MM::Integer, false, pAct);
-    assert(ret == DEVICE_OK);
-
-    pAct = new CPropertyAction(this, &SaperaGigE::OnWidth);
-    ret = CreateProperty("ImageWidth", "1", MM::Integer, false, pAct);
-    assert(ret == DEVICE_OK);
-
-    pAct = new CPropertyAction(this, &SaperaGigE::OnHeight);
-    ret = CreateProperty("ImageHeight", "1", MM::Integer, false, pAct);
-    assert(ret == DEVICE_OK);
-
-    // Set up temperature
-    pAct = new CPropertyAction(this, &SaperaGigE::OnTemperature);
-    ret = CreateProperty("Device Temperature", "-1.0", MM::Float, true, pAct);
-    assert(ret == DEVICE_OK);
 
     // synchronize all properties
     // --------------------------
@@ -312,7 +302,7 @@ int SaperaGigE::FreeHandles()
 {
     if (Xfer_ && *Xfer_ && !Xfer_->Destroy()) return DEVICE_ERR;
     if (!Buffers_.Destroy()) return DEVICE_ERR;
-    if (!feature_.Destroy()) return DEVICE_ERR;
+    if (!AcqFeature_.Destroy()) return DEVICE_ERR;
     if (!AcqDevice_.Destroy()) return DEVICE_ERR;
     return DEVICE_OK;
 }
@@ -597,13 +587,19 @@ int SaperaGigE::OnBinning(MM::PropertyBase* pProp, MM::ActionType eAct)
             return DEVICE_ERR;
         return SynchronizeBuffers();
     }
-    else if (eAct == MM::BeforeGet)
+    // MM::BeforeGet returns the value cached in the property.
+    return DEVICE_OK;
+}
+
+int SaperaGigE::OnBinningMode(MM::PropertyBase* pProp, MM::ActionType eAct)
+{
+    if (eAct == MM::AfterSet)
     {
-        // the user is requesting the current value for the property, so
-        // either ask the 'hardware' or let the system return the value
-        // cached in the property.
-        //pProp->Set((long)binning_);
+        std::string value;
+        pProp->Get(value);
+        AcqDevice_.SetFeatureValue("binningMode", value.c_str());
     }
+    // MM::BeforeGet returns the value cached in the property.
     return DEVICE_OK;
 }
 
@@ -631,11 +627,11 @@ int SaperaGigE::OnOffsetX(MM::PropertyBase* pProp, MM::ActionType eAct)
         pProp->Get(value);
 
         int64_t min, max, inc;
-        AcqDevice_.GetFeatureInfo("OffsetX", &feature_);
-        feature_.GetInc(&inc);
-        feature_.GetMin(&min);
-        feature_.GetMax(&max);
-        value = (value / inc) * inc;
+        AcqDevice_.GetFeatureInfo("OffsetX", &AcqFeature_);
+        AcqFeature_.GetInc(&inc);
+        AcqFeature_.GetMin(&min);
+        AcqFeature_.GetMax(&max);
+        value = (value / (long)inc) * (long)inc;
         value = max(min, min(max, value));
 
         if (!AcqDevice_.SetFeatureValue("OffsetX", int(value)))
@@ -659,10 +655,10 @@ int SaperaGigE::OnOffsetY(MM::PropertyBase* pProp, MM::ActionType eAct)
         pProp->Get(value);
 
         int64_t min, max, inc;
-        AcqDevice_.GetFeatureInfo("OffsetY", &feature_);
-        feature_.GetInc(&inc);
-        feature_.GetMin(&min);
-        feature_.GetMax(&max);
+        AcqDevice_.GetFeatureInfo("OffsetY", &AcqFeature_);
+        AcqFeature_.GetInc(&inc);
+        AcqFeature_.GetMin(&min);
+        AcqFeature_.GetMax(&max);
         value = (value / inc) * inc;
         value = max(min, min(max, value));
 
@@ -687,10 +683,10 @@ int SaperaGigE::OnWidth(MM::PropertyBase* pProp, MM::ActionType eAct)
         pProp->Get(value);
 
         int64_t min, max, inc;
-        AcqDevice_.GetFeatureInfo("Width", &feature_);
-        feature_.GetInc(&inc);
-        feature_.GetMin(&min);
-        feature_.GetMax(&max);
+        AcqDevice_.GetFeatureInfo("Width", &AcqFeature_);
+        AcqFeature_.GetInc(&inc);
+        AcqFeature_.GetMin(&min);
+        AcqFeature_.GetMax(&max);
         value = (value / inc) * inc;
         value = max(min, min(max, value));
 
@@ -716,10 +712,10 @@ int SaperaGigE::OnHeight(MM::PropertyBase* pProp, MM::ActionType eAct)
         pProp->Get(value);
 
         int64_t min, max, inc;
-        AcqDevice_.GetFeatureInfo("Height", &feature_);
-        feature_.GetInc(&inc);
-        feature_.GetMin(&min);
-        feature_.GetMax(&max);
+        AcqDevice_.GetFeatureInfo("Height", &AcqFeature_);
+        AcqFeature_.GetInc(&inc);
+        AcqFeature_.GetMin(&min);
+        AcqFeature_.GetMax(&max);
         value = (value / inc) * inc;
         value = max(min, min(max, value));
 
@@ -925,19 +921,19 @@ int SaperaGigE::SetUpBinningProperties()
 
     // vertical binning
     AcqDevice_.GetFeatureValue("BinningVertical", &bin);
-    AcqDevice_.GetFeatureInfo("BinningVertical", &feature_);
-    feature_.GetMin(&min);
-    feature_.GetMax(&max);
-    feature_.GetInc(&inc);
+    AcqDevice_.GetFeatureInfo("BinningVertical", &AcqFeature_);
+    AcqFeature_.GetMin(&min);
+    AcqFeature_.GetMax(&max);
+    AcqFeature_.GetInc(&inc);
     for (int64_t i = min; i <= max; i += inc)
         vValues.push_back(std::to_string(i));
 
     // horizontal binning
     AcqDevice_.GetFeatureValue("BinningHorizontal", &bin);
-    AcqDevice_.GetFeatureInfo("BinningHorizontal", &feature_);
-    feature_.GetMin(&min);
-    feature_.GetMax(&max);
-    feature_.GetInc(&inc);
+    AcqDevice_.GetFeatureInfo("BinningHorizontal", &AcqFeature_);
+    AcqFeature_.GetMin(&min);
+    AcqFeature_.GetMax(&max);
+    AcqFeature_.GetInc(&inc);
     for (int64_t i = min; i <= max; i += inc)
         hValues.push_back(std::to_string(i));
 

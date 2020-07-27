@@ -32,7 +32,9 @@
 #include "conio.h"
 #include "math.h"
 #include "SapClassBasic.h"
+#include "../MMDevice/ModuleInterface.h"
 #include <string>
+#include <functional>
 
 //////////////////////////////////////////////////////////////////////////////
 // Error codes
@@ -43,31 +45,57 @@ class SequenceThread;
 
 const char* g_CameraName = "SaperaGigE";
 const char* g_CameraServer = "AcquisitionDevice";
+const char* g_ShutterMode = "ShutterMode";
+const char* g_BinningMode = "binningMode";
 
-const std::map< std::string, std::string > deviceInfoFeaturesStr = {
-    // information on device - use names shown in Sapera CamExpert
-    {"Manufacturer Name", "DeviceVendorName"},
-    {"Family Name", "DeviceFamilyName"},
-    {"Model Name", "DeviceModelName"},
-    {"Device Version", "DeviceVersion"},
-    {"Manufacturer Info", "DeviceManufacturerInfo"},
-    {"Manufacturer Part Number", "deviceManufacturerPartNumber"},
-    {"Firmware Version", "DeviceFirmwareVersion"},
-    {"Serial Number", "DeviceSerialNumber"},
-    {"Device User ID", "DeviceUserID"},
-    {"MAC Address", "deviceMacAddress"},
-    {"SensorType", "sensorColorType"},
-    {"SensorPixelCoding", "PixelCoding"},
-    {"SensorBlackLevel", "BlackLevel"},
-    {"SensorPixelInput", "pixelSizeInput"},
-    {"SensorShutterMode", "SensorShutterMode"},
-    {"SensorBinningMode", "binningMode"},
-    {"SensorWidth", "SensorWidth"},
-    {"SensorHeight", "SensorHeight"},
+std::map< SapFeature::Type, MM::PropertyType > featureType = {
+    {SapFeature::TypeString, MM::String},
+    {SapFeature::TypeEnum, MM::String},
+    {SapFeature::TypeInt32, MM::Integer},
+    {SapFeature::TypeFloat, MM::Float},
+    {SapFeature::TypeDouble, MM::Float},
+    {SapFeature::TypeUndefined, MM::String}
 };
 
 class SaperaGigE : public CCameraBase<SaperaGigE>
 {
+private:
+    struct myFeature
+    {
+        char* name;
+        bool readOnly;
+        CPropertyAction* action;
+    };
+
+    const std::map< const char*, myFeature > deviceFeatures = {
+        // information on device - use names shown in Sapera CamExpert
+        {MM::g_Keyword_PixelType, {"PixelFormat", false, new CPropertyAction(this, &SaperaGigE::OnPixelType)}},
+        {"Manufacturer Name", {"DeviceVendorName", true, NULL}},
+        {"Family Name", {"DeviceFamilyName", true, NULL}},
+        {"Model Name", {"DeviceModelName", true, NULL}},
+        {"Device Version", {"DeviceVersion", true, NULL}},
+        {"Manufacturer Info", {"DeviceManufacturerInfo", true, NULL}},
+        {"Manufacturer Part Number", {"deviceManufacturerPartNumber", true, NULL}},
+        {"Firmware Version", {"DeviceFirmwareVersion", true, NULL}},
+        {"Serial Number", {"DeviceSerialNumber", true, NULL}},
+        {"Device User ID", {"DeviceUserID", true, NULL}},
+        {"MAC Address", {"deviceMacAddress", true, NULL}},
+        {"SensorType", {"sensorColorType", true, NULL}},
+        {"SensorPixelCoding", {"PixelCoding", true, NULL}},
+        {"SensorBlackLevel", {"BlackLevel", true, NULL}},
+        {"SensorPixelInput", {"pixelSizeInput", true, NULL}},
+        {"SensorShutterMode", {"SensorShutterMode", false, NULL}},
+        {"SensorBinningMode", {"binningMode", false, new CPropertyAction(this, &SaperaGigE::OnBinningMode)}},
+        {"SensorWidth", {"SensorWidth", true, NULL}},
+        {"SensorHeight", {"SensorHeight", true, NULL}},
+        {"ImagePixelSize", {"PixelSize", true, new CPropertyAction(this, &SaperaGigE::OnPixelSize)}},
+        {"ImageHorizontalOffset", {"OffsetX", false, new CPropertyAction(this, &SaperaGigE::OnOffsetX)}},
+        {"ImageVerticalOffset", {"OffsetY", false, new CPropertyAction(this, &SaperaGigE::OnOffsetY)}},
+        {"ImageWidth", {"Width", false, new CPropertyAction(this, &SaperaGigE::OnWidth)}},
+        {"ImageHeight", {"Height", false, new CPropertyAction(this, &SaperaGigE::OnHeight)}},
+        {"DeviceTemperature", {"DeviceTemperature", true, new CPropertyAction(this, &SaperaGigE::OnTemperature)}},
+    };
+
 public:
     SaperaGigE();
     ~SaperaGigE();
@@ -105,6 +133,7 @@ public:
     // action interface
     // ----------------
     int OnBinning(MM::PropertyBase* pProp, MM::ActionType eAct);
+    int OnBinningMode(MM::PropertyBase* pProp, MM::ActionType eAct);
     int OnPixelSize(MM::PropertyBase* pProp, MM::ActionType eAct);
     int OnOffsetX(MM::PropertyBase* pProp, MM::ActionType eAct);
     int OnOffsetY(MM::PropertyBase* pProp, MM::ActionType eAct);
@@ -116,6 +145,7 @@ public:
     int OnExposure(MM::PropertyBase* pProp, MM::ActionType eAct);
 
 private:
+
     friend class SequenceThread;
     static const int MAX_BIT_DEPTH = 12;
 
@@ -140,7 +170,7 @@ private:
     SapTransfer AcqDeviceToBuf_;
     SapTransfer* Xfer_;
     SapLocation loc_;
-    SapFeature feature_;
+    SapFeature AcqFeature_;
 
     int FreeHandles();
     int ErrorBox(std::string text, std::string caption);
