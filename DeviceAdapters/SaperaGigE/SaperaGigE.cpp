@@ -14,11 +14,6 @@
 
 using namespace std;
 
-const char* g_CameraName = "SaperaGigE";
-const char* g_PixelType_8bit = "8bit";
-const char* g_PixelType_10bit = "10bit";
-const char* g_PixelType_12bit = "12bit";
-
 ///////////////////////////////////////////////////////////////////////////////
 // Exported MMDevice API
 ///////////////////////////////////////////////////////////////////////////////
@@ -73,9 +68,6 @@ SaperaGigE::SaperaGigE() :
     initialized_(false),
     thd_(0),
     sequenceRunning_(false),
-    //SapFormatBytes_(1),
-    AcqDevice_(NULL),
-    Buffers_(NULL),
     Roi_(NULL)
 {
     // call the base class method to set-up default error codes/messages
@@ -116,10 +108,10 @@ SaperaGigE::SaperaGigE() :
         //return DEVICE_NATIVE_MODULE_FAILED;
     }
 
-    ret = CreateProperty(g_CameraServerNameProperty, acqDeviceList_[0].c_str(), MM::String, false, 0, false);
+    ret = CreateProperty(g_CameraServer, acqDeviceList_[0].c_str(), MM::String, false, 0, false);
     assert(ret == DEVICE_OK);
 
-    ret = SetAllowedValues(g_CameraServerNameProperty, acqDeviceList_);
+    ret = SetAllowedValues(g_CameraServer, acqDeviceList_);
     assert(ret == DEVICE_OK);
 
     // set active device to first server in the list
@@ -190,38 +182,15 @@ int SaperaGigE::Initialize()
     if (ret != DEVICE_OK)
         return ret;
 
-    //if (Roi_)
-    //    return DEVICE_INVALID_INPUT_PARAM;
-
-    Buffers_ = SapBufferWithTrash(2, &AcqDevice_);
-    Roi_ = SapBufferRoi(&Buffers_);
-    AcqDeviceToBuf_ = SapAcqDeviceToBuf(&AcqDevice_, &Buffers_);
-    Xfer_ = &AcqDeviceToBuf_;
-
-    if (!Buffers_.Create())
-    {
-        ret = FreeHandles();
-        if (ret != DEVICE_OK)
-            return ret;
-        return DEVICE_NATIVE_MODULE_FAILED;
-    }
-    if (Xfer_ && !Xfer_->Create())
-    {
-        ret = FreeHandles();
-        if (ret != DEVICE_OK)
-            return ret;
-        return DEVICE_NATIVE_MODULE_FAILED;
-    }
+    // set up Sapera / Micro-Manager buffers
+    ret = SynchronizeBuffers();
+    if (ret != DEVICE_OK)
+        return ret;
 
     // set property list
     // -----------------
 
-    // Set up Micro-Manager buffers
-    ret = SapBufferReformat();
-    if (ret != DEVICE_OK)
-       return ret;
-
-    ResizeImageBuffer();
+    // PixelType - load formats from camera
     vector<string> availableFormats;
     char pixelFormat[256];
     AcqDevice_.GetFeatureValue("PixelFormat", pixelFormat, sizeof(pixelFormat));
@@ -236,11 +205,6 @@ int SaperaGigE::Initialize()
         feature_.GetEnumString(i, pixelFormat, sizeof(pixelFormat));
         availableFormats.push_back(pixelFormat);
     }
-
-    // type
-    //pixelTypeValues.push_back(g_PixelType_8bit);
-    //pixelTypeValues.push_back(g_PixelType_10bit);
-
     ret = SetAllowedValues(MM::g_Keyword_PixelType, availableFormats);
     assert(ret == DEVICE_OK);
 
@@ -257,21 +221,6 @@ int SaperaGigE::Initialize()
 
         string s = value;
         ret = CreateProperty(x.first.c_str(), s.c_str(), MM::String, true);
-        assert(ret == DEVICE_OK);
-    }
-
-    // Device information
-    for (auto const& x : deviceInfoFeaturesInt)
-    {
-        BOOL isAvailable;
-        AcqDevice_.IsFeatureAvailable(x.second.c_str(), &isAvailable);
-        if (!isAvailable)
-            continue;
-        UINT32 value;
-        if (!AcqDevice_.GetFeatureValue(x.second.c_str(), &value))
-            return DEVICE_ERR;
-
-        ret = CreateProperty(x.first.c_str(), CDeviceUtils::ConvertToString((long)value), MM::Integer, true);
         assert(ret == DEVICE_OK);
     }
 
@@ -300,16 +249,8 @@ int SaperaGigE::Initialize()
     feature_.GetMax(&high); // us
     SetPropertyLimits(MM::g_Keyword_Exposure, low / 1000., high / 1000.);
 
-    //{"Width", "Width"},
-
-    int64_t min, max, value;
-
     pAct = new CPropertyAction(this, &SaperaGigE::OnPixelSize);
     ret = CreateProperty("ImagePixelSize", "1", MM::Integer, true, pAct);
-    assert(ret == DEVICE_OK);
-
-    pAct = new CPropertyAction(this, &SaperaGigE::OnBlackLevel);
-    ret = CreateProperty("SensorBlackLevel", "1", MM::String, true, pAct);
     assert(ret == DEVICE_OK);
 
     pAct = new CPropertyAction(this, &SaperaGigE::OnOffsetX);
@@ -321,19 +262,12 @@ int SaperaGigE::Initialize()
     assert(ret == DEVICE_OK);
 
     pAct = new CPropertyAction(this, &SaperaGigE::OnWidth);
-    ret = CreateProperty("ImageWidth", "1", MM::Integer, true, pAct);
+    ret = CreateProperty("ImageWidth", "1", MM::Integer, false, pAct);
     assert(ret == DEVICE_OK);
 
     pAct = new CPropertyAction(this, &SaperaGigE::OnHeight);
-    ret = CreateProperty("ImageHeight", "1", MM::Integer, true, pAct);
+    ret = CreateProperty("ImageHeight", "1", MM::Integer, false, pAct);
     assert(ret == DEVICE_OK);
-    //AcqDevice_.GetFeatureInfo("Height", &feature_);
-    //feature_.GetMin(&min);
-    //feature_.GetMax(&max);
-    //SetPropertyLimits("Height", min, max);
-    //AcqDevice_.GetFeatureValue("SensorHeight", &value);
-    ////if (!AcqDevice_.SetFeatureValue("Height", 1200))
-    ////    return DEVICE_ERR;
 
     // Set up temperature
     pAct = new CPropertyAction(this, &SaperaGigE::OnTemperature);
@@ -343,12 +277,6 @@ int SaperaGigE::Initialize()
     // synchronize all properties
     // --------------------------
     ret = UpdateStatus();
-    if (ret != DEVICE_OK)
-        return ret;
-
-    // setup the buffer
-    // ----------------
-    ret = ResizeImageBuffer();
     if (ret != DEVICE_OK)
         return ret;
 
@@ -384,7 +312,6 @@ int SaperaGigE::FreeHandles()
 {
     if (Xfer_ && *Xfer_ && !Xfer_->Destroy()) return DEVICE_ERR;
     if (!Buffers_.Destroy()) return DEVICE_ERR;
-    //if (!Acq_.Destroy()) return DEVICE_ERR;
     if (!feature_.Destroy()) return DEVICE_ERR;
     if (!AcqDevice_.Destroy()) return DEVICE_ERR;
     return DEVICE_OK;
@@ -431,11 +358,8 @@ int SaperaGigE::SnapImage()
 const unsigned char* SaperaGigE::GetImageBuffer()
 {
     // Put Sapera buffer into Micro-Manager Buffer
-    int x = Roi_.GetXMin(); // roiX_;
-    int y = Roi_.GetYMin(); // roiY_;
-
-    //Roi_.Read(0, img_.Width() * img_.Height(), const_cast<unsigned char*>(img_.GetPixels()));
-    Buffers_.ReadRect(x, y, img_.Width(), img_.Height(), const_cast<unsigned char*>(img_.GetPixels()));
+    Buffers_.ReadRect(Roi_->GetXMin(), Roi_->GetYMin(), img_.Width(), img_.Height(),
+        const_cast<unsigned char*>(img_.GetPixels()));
     // Return location of the Micro-Manager Buffer
     return const_cast<unsigned char*>(img_.GetPixels());
 }
@@ -510,27 +434,22 @@ int SaperaGigE::SetROI(unsigned x, unsigned y, unsigned xSize, unsigned ySize)
     else
     {
         // apply ROI
-        //Roi_.Destroy();
-        Roi_.SetRoi(x, y, xSize, ySize);
-        //if (!Roi_.Create())
-        //    return DEVICE_ERR;
+        Roi_->SetRoi(x, y, xSize, ySize);
         img_.Resize(xSize, ySize);
-        //roiX_ = x;
-        //roiY_ = y;
     }
     return DEVICE_OK;
 }
 
 /**
-* Returns the actual dimensions of the current ROI.
+* Returns the actual dimensions of the current ROI
 * Required by the MM::Camera API.
 */
 int SaperaGigE::GetROI(unsigned& x, unsigned& y, unsigned& xSize, unsigned& ySize)
 {
-    x = Roi_.GetXMin(); // roiX_;
-    y = Roi_.GetYMin(); // roiY_;
-    xSize = Roi_.GetWidth(); // img_.Width();
-    ySize = Roi_.GetHeight(); // img_.Height();
+    x = Roi_->GetXMin();
+    y = Roi_->GetYMin();
+    xSize = Roi_->GetWidth();
+    ySize = Roi_->GetHeight();
 
     return DEVICE_OK;
 }
@@ -541,13 +460,8 @@ int SaperaGigE::GetROI(unsigned& x, unsigned& y, unsigned& xSize, unsigned& ySiz
 */
 int SaperaGigE::ClearROI()
 {
-    //Roi_.Destroy();
-    Roi_.ResetRoi();
-    //if (!Roi_.Create())
-    //    return DEVICE_ERR;
+    Roi_->ResetRoi();
     ResizeImageBuffer();
-    //roiX_ = 0;
-    //roiY_ = 0;
     return DEVICE_OK;
 }
 
@@ -681,7 +595,7 @@ int SaperaGigE::OnBinning(MM::PropertyBase* pProp, MM::ActionType eAct)
             return DEVICE_ERR;
         if (!AcqDevice_.SetFeatureValue("BinningHorizontal", int(binSize)))
             return DEVICE_ERR;
-        return ResizeImageBuffer();
+        return SynchronizeBuffers();
     }
     else if (eAct == MM::BeforeGet)
     {
@@ -709,28 +623,21 @@ int SaperaGigE::OnPixelSize(MM::PropertyBase* pProp, MM::ActionType eAct)
     return DEVICE_OK;
 }
 
-int SaperaGigE::OnBlackLevel(MM::PropertyBase* pProp, MM::ActionType eAct)
-{
-    if (eAct == MM::AfterSet)
-    {
-        return DEVICE_CAN_NOT_SET_PROPERTY;
-    }
-    else if (eAct == MM::BeforeGet)
-    {
-        char value[10];
-        if (!AcqDevice_.GetFeatureValue("BlackLevel", value, sizeof(value)))
-            return DEVICE_ERR;
-        pProp->Set(value);
-    }
-    return DEVICE_OK;
-}
-
 int SaperaGigE::OnOffsetX(MM::PropertyBase* pProp, MM::ActionType eAct)
 {
     if (eAct == MM::AfterSet)
     {
         long value;
         pProp->Get(value);
+
+        int64_t min, max, inc;
+        AcqDevice_.GetFeatureInfo("OffsetX", &feature_);
+        feature_.GetInc(&inc);
+        feature_.GetMin(&min);
+        feature_.GetMax(&max);
+        value = (value / inc) * inc;
+        value = max(min, min(max, value));
+
         if (!AcqDevice_.SetFeatureValue("OffsetX", int(value)))
             return DEVICE_ERR;
     }
@@ -750,6 +657,15 @@ int SaperaGigE::OnOffsetY(MM::PropertyBase* pProp, MM::ActionType eAct)
     {
         long value;
         pProp->Get(value);
+
+        int64_t min, max, inc;
+        AcqDevice_.GetFeatureInfo("OffsetY", &feature_);
+        feature_.GetInc(&inc);
+        feature_.GetMin(&min);
+        feature_.GetMax(&max);
+        value = (value / inc) * inc;
+        value = max(min, min(max, value));
+
         if (!AcqDevice_.SetFeatureValue("OffsetY", int(value)))
             return DEVICE_ERR;
     }
@@ -767,7 +683,20 @@ int SaperaGigE::OnWidth(MM::PropertyBase* pProp, MM::ActionType eAct)
 {
     if (eAct == MM::AfterSet)
     {
-        return DEVICE_CAN_NOT_SET_PROPERTY;
+        long value;
+        pProp->Get(value);
+
+        int64_t min, max, inc;
+        AcqDevice_.GetFeatureInfo("Width", &feature_);
+        feature_.GetInc(&inc);
+        feature_.GetMin(&min);
+        feature_.GetMax(&max);
+        value = (value / inc) * inc;
+        value = max(min, min(max, value));
+
+        int ret = SynchronizeBuffers("", value, -1);
+        if (ret != DEVICE_OK)
+            return ret;
     }
     else if (eAct == MM::BeforeGet)
     {
@@ -783,7 +712,20 @@ int SaperaGigE::OnHeight(MM::PropertyBase* pProp, MM::ActionType eAct)
 {
     if (eAct == MM::AfterSet)
     {
-        return DEVICE_CAN_NOT_SET_PROPERTY;
+        long value;
+        pProp->Get(value);
+
+        int64_t min, max, inc;
+        AcqDevice_.GetFeatureInfo("Height", &feature_);
+        feature_.GetInc(&inc);
+        feature_.GetMin(&min);
+        feature_.GetMax(&max);
+        value = (value / inc) * inc;
+        value = max(min, min(max, value));
+
+        int ret = SynchronizeBuffers("", -1, value);
+        if (ret != DEVICE_OK)
+            return ret;
     }
     else if (eAct == MM::BeforeGet)
     {
@@ -826,10 +768,9 @@ int SaperaGigE::OnPixelType(MM::PropertyBase* pProp, MM::ActionType eAct)
         if (!(value.compare(pixelFormat) == 0))
         {
             //resize the SapBuffer
-            int ret = SapBufferReformat(value);
+            int ret = SynchronizeBuffers(value);
             if (ret != DEVICE_OK)
-               return ret;
-            ResizeImageBuffer();
+                return ret;
         }
     }
     else if (eAct == MM::BeforeGet)
@@ -898,9 +839,6 @@ int SaperaGigE::ResizeImageBuffer()
     if (!AcqDevice_.GetFeatureValue("Width", &width))
         return DEVICE_INVALID_PROPERTY;
 
-    //width = Buffers_.GetWidth();
-    int wid = Roi_.GetWidth();
-
     img_.Resize(width, height, bytesPerPixel_);
 
     return DEVICE_OK;
@@ -922,25 +860,31 @@ void SaperaGigE::GenerateImage()
 /*
  * Reformat Sapera Buffer Object
  */
-int SaperaGigE::SapBufferReformat(std::string pixelFormat)
+int SaperaGigE::SynchronizeBuffers(std::string pixelFormat, int width, int height)
 {
     // destroy transfer and buffer
-    if (Xfer_ != NULL)
+    if (Roi_ != NULL)
+    {
+        delete Roi_;
         Xfer_->Destroy();
-    if (Buffers_ != NULL)
         Buffers_.Destroy();
+    }
 
     // default value
     if (pixelFormat.size())
         AcqDevice_.SetFeatureValue("PixelFormat", pixelFormat.c_str());
- 
+    if (width > 0)
+        AcqDevice_.SetFeatureValue("Width", width);
+    if (height > 0)
+        AcqDevice_.SetFeatureValue("Height", height);
+
     // synchronize bit depth with camera
     AcqDevice_.GetFeatureValue("PixelSize", &bitsPerPixel_);
     bytesPerPixel_ = (bitsPerPixel_ + 7) / 8;
 
     // re-create  transfer and buffer
     Buffers_ = SapBufferWithTrash(2, &AcqDevice_);
-    Roi_ = SapBufferRoi(&Buffers_);
+    Roi_ = new SapBufferRoi(&Buffers_);
     AcqDeviceToBuf_ = SapAcqDeviceToBuf(&AcqDevice_, &Buffers_);
     Xfer_ = &AcqDeviceToBuf_;
     if (!Buffers_.Create())
@@ -957,6 +901,8 @@ int SaperaGigE::SapBufferReformat(std::string pixelFormat)
             return ret;
         return DEVICE_NATIVE_MODULE_FAILED;
     }
+    ResizeImageBuffer();
+
     return DEVICE_OK;
 }
 

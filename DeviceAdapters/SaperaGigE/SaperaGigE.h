@@ -41,6 +41,9 @@
 
 class SequenceThread;
 
+const char* g_CameraName = "SaperaGigE";
+const char* g_CameraServer = "AcquisitionDevice";
+
 const std::map< std::string, std::string > deviceInfoFeaturesStr = {
     // information on device - use names shown in Sapera CamExpert
     {"Manufacturer Name", "DeviceVendorName"},
@@ -55,32 +58,13 @@ const std::map< std::string, std::string > deviceInfoFeaturesStr = {
     {"MAC Address", "deviceMacAddress"},
     {"SensorType", "sensorColorType"},
     {"SensorPixelCoding", "PixelCoding"},
-    //{"SensorBlackLevel", "BlackLevel"},
+    {"SensorBlackLevel", "BlackLevel"},
     {"SensorPixelInput", "pixelSizeInput"},
     {"SensorShutterMode", "SensorShutterMode"},
-    {"SensorBinningMode", "binningMode"}
-};
-
-const std::map< std::string, std::string > deviceInfoFeaturesInt = {
+    {"SensorBinningMode", "binningMode"},
     {"SensorWidth", "SensorWidth"},
     {"SensorHeight", "SensorHeight"},
-    //{"Sensor Pixel Size", "PixelSize"},
-    //{"Horizontal Offset", "OffsetX"},
-    //{"Vertical Offset", "OffsetY"},
 };
-
-//const std::map< std::string, SapFormat > pixelFormat = {
-//    {"Mono8", SapFormatMono8},
-//    {"Mono10", SapFormatMono10}
-//};
-
-const std::map< std::string, int > pixelBit = {
-    {"8bit", 8},
-    {"10bit", 10},
-    {"12bit", 12}
-};
-
-const char* g_CameraServerNameProperty = "AcquisitionDevice";
 
 class SaperaGigE : public CCameraBase<SaperaGigE>
 {
@@ -122,7 +106,6 @@ public:
     // ----------------
     int OnBinning(MM::PropertyBase* pProp, MM::ActionType eAct);
     int OnPixelSize(MM::PropertyBase* pProp, MM::ActionType eAct);
-    int OnBlackLevel (MM::PropertyBase* pProp, MM::ActionType eAct);
     int OnOffsetX(MM::PropertyBase* pProp, MM::ActionType eAct);
     int OnOffsetY(MM::PropertyBase* pProp, MM::ActionType eAct);
     int OnWidth(MM::PropertyBase* pProp, MM::ActionType eAct);
@@ -152,19 +135,18 @@ private:
 
     SapAcqDevice AcqDevice_;
     SapBufferWithTrash Buffers_;
-    SapBufferRoi Roi_;
+    SapBufferRoi* Roi_;
     SapTransfer AcqToBuf_;
     SapTransfer AcqDeviceToBuf_;
     SapTransfer* Xfer_;
     SapLocation loc_;
     SapFeature feature_;
-    //int SapFormatBytes_;
 
     int FreeHandles();
     int ErrorBox(std::string text, std::string caption);
     int SetUpBinningProperties();
     LPCWSTR SaperaGigE::string2winstring(const std::string& s);
-    int SapBufferReformat(std::string pixelFormat="");
+    int SynchronizeBuffers(std::string pixelFormat = "", int width = -1, int height = -1);
 };
 
 //threading stuff.  Tread lightly
