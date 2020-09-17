@@ -25,6 +25,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <Library Include="..\..\..\..\..\Program Files\Teledyne DALSA\Sapera\Lib\Win64\SapClassBasic.lib" />
+    <Library Include="C:\Program Files\Teledyne DALSA\Sapera\Lib\Win64\SapClassBasic.lib" />
   </ItemGroup>
 </Project>
