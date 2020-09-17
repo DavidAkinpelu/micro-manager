@@ -12,7 +12,6 @@
   </ItemGroup>
   <ItemGroup>
     <Library Include="$(SAPERADIR)\Lib\Win64\SapClassBasic.lib" />
-    <Library Include="..\..\build\Debug\x64\MMDevice-SharedRuntime.lib" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="SaperaGigE.h">
