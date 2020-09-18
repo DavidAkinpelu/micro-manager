@@ -202,6 +202,7 @@ int SaperaGigE::Initialize()
         return ret;
 
     // set up Sapera / Micro-Manager buffers
+    LogMessage((std::string) "Setting up buffers");
     ret = SynchronizeBuffers();
     if (ret != DEVICE_OK)
         return ret;
@@ -295,7 +296,7 @@ int SaperaGigE::Shutdown()
 {
     if (!initialized_)
         return DEVICE_OK;
-    LogMessage((std::string) "Shuttind down device '" + loc_.GetServerName() + "'");
+    LogMessage((std::string) "Shutting down device '" + loc_.GetServerName() + "'");
 
     initialized_ = false;
     Xfer_->Freeze();
@@ -427,6 +428,7 @@ long SaperaGigE::GetImageBufferSize() const
 */
 int SaperaGigE::SetROI(unsigned x, unsigned y, unsigned xSize, unsigned ySize)
 {
+    LogMessage((std::string) "Setting Region of Interest");
     if (xSize == 0 && ySize == 0)
         return ClearROI();
     else
@@ -930,6 +932,19 @@ void SaperaGigE::XferCallback(SapXferCallbackInfo* pInfo)
 
 int SaperaGigE::SetUpBinningProperties()
 {
+    BOOL hasHorzBinning;
+    BOOL hasVertBinning;
+    AcqDevice_.IsFeatureAvailable("BinningHorizontal", &hasHorzBinning);
+    AcqDevice_.IsFeatureAvailable("BinningVertical", &hasVertBinning);
+    if (!hasHorzBinning || !hasVertBinning)
+    {
+        if (!hasHorzBinning)
+            LogMessage((std::string) "Feature 'BinningHorizontal' is not supported");
+        if (!hasVertBinning)
+            LogMessage((std::string) "Feature 'BinningVertical' is not supported");
+        return DEVICE_OK;
+    }
+
     // note that the GenICam spec separates vertical and horizontal binning and does
     // not provide a single, unified binning property.
     LogMessage((std::string) "Set up binning properties");
@@ -938,15 +953,15 @@ int SaperaGigE::SetUpBinningProperties()
     if (DEVICE_OK != ret)
         return ret;
 
-    if (!AcqDevice_.SetFeatureValue("BinningVertical", 1))
-        return DEVICE_ERR;
-    if (!AcqDevice_.SetFeatureValue("BinningHorizontal", 1))
-        return DEVICE_ERR;
-
     int64_t bin, min, max, inc;
     std::vector<std::string> vValues, hValues, binValues;
 
     // vertical binning
+    if (!AcqDevice_.SetFeatureValue("BinningVertical", 1))
+    {
+        LogMessage((std::string) "Failed to set 'BinningVertical'");
+        return DEVICE_INVALID_PROPERTY;
+    }
     AcqDevice_.GetFeatureValue("BinningVertical", &bin);
     AcqDevice_.GetFeatureInfo("BinningVertical", &AcqFeature_);
     AcqFeature_.GetMin(&min);
@@ -956,6 +971,11 @@ int SaperaGigE::SetUpBinningProperties()
         vValues.push_back(std::to_string(i));
 
     // horizontal binning
+    if (!AcqDevice_.SetFeatureValue("BinningHorizontal", 1))
+    {
+        LogMessage((std::string) "Failed to set 'BinningHorizontal'");
+        return DEVICE_INVALID_PROPERTY;
+    }
     AcqDevice_.GetFeatureValue("BinningHorizontal", &bin);
     AcqDevice_.GetFeatureInfo("BinningHorizontal", &AcqFeature_);
     AcqFeature_.GetMin(&min);
